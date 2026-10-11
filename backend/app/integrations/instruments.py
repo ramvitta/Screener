@@ -104,6 +104,87 @@ def nearest_expiry(rows: List[dict], symbol: str, on_or_after: date) -> date:
     return min(expiries)
 
 
+# --- Stock (F&O) helpers, for the admin historical-data-download page ---
+# Confirmed against a real instrument-master download (see
+# backend/scripts/stock_history_probe.py): stock options are segment NFO /
+# instrument_type OPTSTK, stock futures are NFO / FUTSTK, and cash equity is
+# segment NSE / instrument_type EQ with trading_symbol "<SYMBOL>-EQ" (not a
+# bare symbol match, unlike the index spot lookup in find_spot()).
+
+
+def find_stock_equity(rows: List[dict], symbol: str) -> ResolvedContract:
+    try:
+        row = next(r for r in rows if r["segment"] == "NSE" and r["instrument_type"] == "EQ" and r["trading_symbol"] == f"{symbol}-EQ")
+    except StopIteration:
+        raise ContractNotFound(f"No NSE equity listing found for {symbol}") from None
+    return ResolvedContract(exchange="NSE", token=row["token"], trading_symbol=row["trading_symbol"])
+
+
+def list_fno_stocks(rows: List[dict]) -> List[dict]:
+    """Distinct F&O stock symbols with lot size and nearest future expiry —
+    for the admin page's stock picker."""
+    by_symbol: dict = {}
+    for r in rows:
+        if r["segment"] != "NFO" or r["instrument_type"] not in ("OPTSTK", "FUTSTK"):
+            continue
+        entry = by_symbol.setdefault(r["symbol"], {"symbol": r["symbol"], "lot_size": int(r["lot_size"]), "expiries": set()})
+        entry["expiries"].add(r["expiry"])
+    out = []
+    for symbol, entry in sorted(by_symbol.items()):
+        expiries = sorted(_parse_expiry(e) for e in entry["expiries"])
+        out.append({"symbol": symbol, "lot_size": entry["lot_size"], "nearest_expiry": expiries[0] if expiries else None})
+    return out
+
+
+def list_future_expiries(rows: List[dict], symbol: str, on_or_after: date) -> List[date]:
+    rows = [r for r in rows if r["segment"] == "NFO" and r["symbol"] == symbol and r["instrument_type"] == "FUTSTK"]
+    return sorted({e for r in rows if (e := _parse_expiry(r["expiry"])) >= on_or_after})
+
+
+def list_option_expiries(rows: List[dict], symbol: str, on_or_after: date) -> List[date]:
+    rows = [r for r in rows if r["segment"] == "NFO" and r["symbol"] == symbol and r["instrument_type"] == "OPTSTK"]
+    return sorted({e for r in rows if (e := _parse_expiry(r["expiry"])) >= on_or_after})
+
+
+def find_stock_future(rows: List[dict], symbol: str, expiry: date) -> ResolvedContract:
+    try:
+        row = next(
+            r for r in rows
+            if r["segment"] == "NFO" and r["symbol"] == symbol and r["instrument_type"] == "FUTSTK" and _parse_expiry(r["expiry"]) == expiry
+        )
+    except StopIteration:
+        raise ContractNotFound(f"No {symbol} future for expiry {expiry}") from None
+    return ResolvedContract(exchange="NFO", token=row["token"], trading_symbol=row["trading_symbol"], expiry=expiry)
+
+
+def find_stock_option(rows: List[dict], symbol: str, expiry: date, strike: float, option_type: str) -> ResolvedContract:
+    try:
+        row = next(
+            r for r in rows
+            if r["segment"] == "NFO" and r["symbol"] == symbol and r["instrument_type"] == "OPTSTK"
+            and r["option_type"] == option_type and _parse_expiry(r["expiry"]) == expiry and float(r["strike"]) == strike
+        )
+    except StopIteration:
+        raise ContractNotFound(f"No {symbol} {option_type} {strike} contract for expiry {expiry}") from None
+    return ResolvedContract(exchange="NFO", token=row["token"], trading_symbol=row["trading_symbol"], expiry=expiry, strike=strike)
+
+
+def list_strikes_near(rows: List[dict], symbol: str, expiry: date, option_type: str, spot: float, band: int) -> List[float]:
+    """The `band` nearest strikes to spot for this symbol/expiry/option_type
+    — downloading every strike (a liquid stock can have 100+) isn't useful;
+    most OI sits near the money."""
+    strikes = sorted(
+        {
+            float(r["strike"])
+            for r in rows
+            if r["segment"] == "NFO" and r["symbol"] == symbol and r["instrument_type"] == "OPTSTK"
+            and r["option_type"] == option_type and _parse_expiry(r["expiry"]) == expiry
+        },
+        key=lambda s: abs(s - spot),
+    )
+    return sorted(strikes[:band])
+
+
 async def resolve_nifty_atm_contracts(client: DefinedgeClient) -> NiftyAtmContracts:
     rows = await get_master_rows(client)
     today = date.today()

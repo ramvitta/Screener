@@ -128,6 +128,35 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 
+-- Admin historical-data-download jobs (see api/routes/admin.py and
+-- integrations/history_downloader.py). Proactive archival only — a stock's
+-- CURRENTLY-listed equity/future/option contracts, not expired ones (the
+-- broker's history endpoint stops serving a contract once it rolls off the
+-- live instrument master; confirmed via scripts/stock_history_probe.py).
+CREATE TABLE IF NOT EXISTS download_jobs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol          TEXT NOT NULL,
+    start_date      TEXT NOT NULL,
+    end_date        TEXT NOT NULL,
+    scope_json      TEXT NOT NULL,  -- {"equity":true,"futures":true,"options":true,"strike_band":10}
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed','cancelled')),
+    total_items     INTEGER NOT NULL DEFAULT 0,
+    completed_items INTEGER NOT NULL DEFAULT 0,
+    total_rows      INTEGER NOT NULL DEFAULT 0,
+    error           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS download_job_items (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          INTEGER NOT NULL REFERENCES download_jobs(id),
+    instrument_key  TEXT NOT NULL,  -- e.g. "EQUITY|RELIANCE" or "OPTION|RELIANCE|2026-10-27|1170|CE"
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','failed','skipped')),
+    rows            INTEGER NOT NULL DEFAULT 0,
+    error           TEXT
+);
+
 CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 
@@ -147,7 +176,7 @@ WHEN NEW.qty <= 0 OR NEW.entry_price < 0 OR NEW.strike <= 0
 BEGIN SELECT RAISE(ABORT, 'invalid leg qty/price/strike'); END;
 """
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3  # +download_jobs/download_job_items (admin historical-data-download)
 
 
 def get_db_path() -> str:

@@ -48,5 +48,15 @@ class Settings(BaseSettings):
     sessions_retention_hours: int = 24
     logs_retention_days: int = 14
 
+    # --- Admin historical-data-download (proactive archival) ---
+    history_rps: float = 3.0  # max historical-candle requests/sec to Definedge
+    history_max_retries: int = 3
+    # Definedge's equity 1-min history is capped at roughly this many days
+    # back regardless of the requested range (confirmed empirically via
+    # scripts/stock_history_probe.py — 365d and 730d requests returned
+    # identical data). Validate/download clamp to this rather than silently
+    # returning less than asked for.
+    history_equity_max_days_back: int = 180
+
 
 settings = Settings()

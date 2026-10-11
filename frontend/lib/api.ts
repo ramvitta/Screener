@@ -3,6 +3,12 @@ import type {
   BackfillStatus,
   BrokerSessionInfo,
   ChainResponse,
+  DownloadCoverageRow,
+  DownloadJobItemStatus,
+  DownloadJobStatus,
+  DownloadScope,
+  DownloadValidateResponse,
+  FnoStock,
   IndexQuote,
   KellySizingResponse,
   OiPcrResponse,
@@ -264,4 +270,58 @@ export async function fetchOiPcr(symbol = "NIFTY", depth = 5): Promise<OiPcrResp
  * fabricated default capital). */
 export async function fetchKellySizing(capital: number): Promise<KellySizingResponse> {
   return getJson<KellySizingResponse>(`/api/v1/analytics/kelly?capital=${capital}`);
+}
+
+// --- Admin: historical-data-download (proactive archival) ---
+
+export async function fetchFnoStocks(): Promise<FnoStock[]> {
+  return getJson<FnoStock[]>("/api/v1/admin/history/fno-stocks");
+}
+
+export async function validateDownload(
+  symbol: string,
+  startDate: string,
+  endDate: string,
+  scope: DownloadScope,
+): Promise<DownloadValidateResponse> {
+  return postJson<DownloadValidateResponse>("/api/v1/admin/history/validate", {
+    symbol,
+    start_date: startDate,
+    end_date: endDate,
+    scope,
+  });
+}
+
+export async function createDownloadJob(
+  symbol: string,
+  startDate: string,
+  endDate: string,
+  scope: DownloadScope,
+): Promise<DownloadJobStatus> {
+  return postJson<DownloadJobStatus>("/api/v1/admin/history/jobs", {
+    symbol,
+    start_date: startDate,
+    end_date: endDate,
+    scope,
+  });
+}
+
+export async function fetchDownloadJobs(): Promise<DownloadJobStatus[]> {
+  return getJson<DownloadJobStatus[]>("/api/v1/admin/history/jobs");
+}
+
+export async function fetchDownloadJob(jobId: number): Promise<DownloadJobStatus> {
+  return getJson<DownloadJobStatus>(`/api/v1/admin/history/jobs/${jobId}`);
+}
+
+export async function fetchDownloadJobItems(jobId: number): Promise<DownloadJobItemStatus[]> {
+  return getJson<DownloadJobItemStatus[]>(`/api/v1/admin/history/jobs/${jobId}/items`);
+}
+
+export async function stopDownloadJob(jobId: number): Promise<DownloadJobStatus> {
+  return postJson<DownloadJobStatus>(`/api/v1/admin/history/jobs/${jobId}/stop`);
+}
+
+export async function fetchDownloadCoverage(symbol: string): Promise<DownloadCoverageRow[]> {
+  return getJson<DownloadCoverageRow[]>(`/api/v1/admin/history/coverage?symbol=${symbol}`);
 }

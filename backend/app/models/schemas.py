@@ -327,3 +327,77 @@ class KellySizingResponse(BaseModel):
     managed_sl_risk_pct_of_capital: float
     over_allocated: bool
     open_leg_count: int
+
+
+# --- Admin historical-data-download (proactive archival — see
+# integrations/history_downloader.py for why expired contracts are out of
+# scope: the broker's history endpoint stops serving a contract once it
+# rolls off the live instrument master) ---
+
+
+class FnoStock(BaseModel):
+    symbol: str
+    lot_size: int
+    nearest_expiry: Optional[date] = None
+
+
+class DownloadScope(StrictModel):
+    equity: bool = True
+    futures: bool = True
+    options: bool = True
+    strike_band: int = Field(default=10, ge=1, le=40)  # nearest N strikes per side, per expiry
+
+
+class DownloadValidateRequest(StrictModel):
+    symbol: Symbol
+    start_date: date
+    end_date: date
+    scope: DownloadScope = DownloadScope()
+
+
+class DownloadValidateItem(BaseModel):
+    instrument_key: str
+    label: str
+    available: bool
+    note: Optional[str] = None
+
+
+class DownloadValidateResponse(BaseModel):
+    symbol: str
+    clamped_start_date: date  # equity history is capped ~6mo back; clamped silently, shown here
+    clamped_end_date: date
+    items: List[DownloadValidateItem]
+    estimated_candle_calls: int
+    warnings: List[str] = Field(default_factory=list)
+
+
+class DownloadJobCreate(DownloadValidateRequest):
+    pass
+
+
+class DownloadJobItemStatus(BaseModel):
+    instrument_key: str
+    status: str
+    rows: int
+    error: Optional[str] = None
+
+
+class DownloadJobStatus(BaseModel):
+    id: int
+    symbol: str
+    start_date: date
+    end_date: date
+    status: str
+    total_items: int
+    completed_items: int
+    total_rows: int
+    error: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DownloadCoverageRow(BaseModel):
+    instrument_type: str
+    count: int
+    min_ts: Optional[datetime] = None
+    max_ts: Optional[datetime] = None

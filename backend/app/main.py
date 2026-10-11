@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import account, alerts, analytics, auth, backfill, chain, charts, market, positions, screener, ws
+from app.api.routes import account, admin, alerts, analytics, auth, backfill, chain, charts, market, positions, screener, ws
 from app.api.routes.auth import ensure_authenticated, purge_expired_sessions
 from app.config import settings
 from app.core.logging import new_request_id, register_settings_secrets, request_id_var, setup_logging
@@ -109,6 +109,7 @@ for _router in (
     positions.router,
     alerts.router,
     backfill.router,
+    admin.router,
 ):
     app.include_router(_router, dependencies=_protected)
 app.include_router(ws.router)  # authenticates itself per-connection (core/security.py)

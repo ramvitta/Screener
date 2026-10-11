@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatCurrency } from "@/lib/format";
 import type { BrokerSessionInfo, IndexQuote } from "@/lib/types";
 
@@ -90,6 +91,9 @@ export default function TopBar({
           </span>
         )}
       </div>
+      <Link href="/admin" className="text-xs text-[#8B96A5]" title="Admin: historical-data archive">
+        Admin
+      </Link>
     </div>
   );
 }

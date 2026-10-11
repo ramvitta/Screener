@@ -237,3 +237,62 @@ export interface KellySizingResponse {
   over_allocated: boolean;
   open_leg_count: number;
 }
+
+// --- Admin: historical-data-download (proactive archival) ---
+
+export interface FnoStock {
+  symbol: string;
+  lot_size: number;
+  nearest_expiry: string | null;
+}
+
+export interface DownloadScope {
+  equity: boolean;
+  futures: boolean;
+  options: boolean;
+  strike_band: number;
+}
+
+export interface DownloadValidateItem {
+  instrument_key: string;
+  label: string;
+  available: boolean;
+  note: string | null;
+}
+
+export interface DownloadValidateResponse {
+  symbol: string;
+  clamped_start_date: string;
+  clamped_end_date: string;
+  items: DownloadValidateItem[];
+  estimated_candle_calls: number;
+  warnings: string[];
+}
+
+export interface DownloadJobStatus {
+  id: number;
+  symbol: string;
+  start_date: string;
+  end_date: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  total_items: number;
+  completed_items: number;
+  total_rows: number;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DownloadJobItemStatus {
+  instrument_key: string;
+  status: "pending" | "done" | "failed" | "skipped";
+  rows: number;
+  error: string | null;
+}
+
+export interface DownloadCoverageRow {
+  instrument_type: string;
+  count: number;
+  min_ts: string | null;
+  max_ts: string | null;
+}
