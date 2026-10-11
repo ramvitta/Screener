@@ -1,0 +1,17 @@
+{
+  "pricing": {
+    "max_abs_error": {
+      "price": 3.637978807091713e-12,
+      "delta": 4.94879281414673e-05,
+      "gamma": 4.996474886469481e-06,
+      "theta": 0.004981623413584657,
+      "vega": 0.004985014678633215
+    }
+  },
+  "screener": {
+    "pass_rate": 1.0
+  },
+  "reason": {
+    "unsafe_accepted": 0
+  }
+}

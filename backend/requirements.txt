@@ -1,0 +1,16 @@
+# Pinned for reproducible, auditable installs. Update deliberately and run
+# `pip-audit -r requirements.txt` + the full test/eval suite afterwards.
+fastapi==0.128.8
+uvicorn[standard]==0.39.0
+pydantic==2.13.5
+pydantic-settings==2.11.0
+httpx==0.28.1
+websockets==15.0.1  # required by uvicorn for the /ws endpoints
+clickhouse-connect==0.15.1
+APScheduler==3.11.3
+python-dotenv==1.2.1
+pyotp==2.10.0
+scipy==1.13.1
+numpy==2.0.2
+cryptography==50.0.2
+typing_extensions==4.16.0

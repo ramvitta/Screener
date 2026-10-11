@@ -1,0 +1,12 @@
+{
+  "name": "crossed_market",
+  "note": "Long put wing priced above the short leg (negative credit): that spread must be dropped, never emitted.",
+  "snapshot": {
+    "spot": 21834.5, "t_years": 0.0137, "data_source": "live", "history": "none",
+    "chain": [
+      [21600, "PE", 90, 0.16, -0.10], [21700, "PE", 27, 0.152, -0.19],
+      [22000, "CE", 45, 0.141, 0.20], [22100, "CE", 23, 0.136, 0.11]
+    ]
+  },
+  "expected": {"emits": ["bear_call_spread"]}
+}

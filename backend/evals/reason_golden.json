@@ -1,0 +1,16 @@
+{
+  "facts": {"strategy": "bull_put_spread", "max_profit_rupees": 13.0, "max_loss_rupees": 87.0, "breakeven": 21687.0, "pop": 0.81,
+            "legs": [{"strike": 21700}, {"strike": 21600}], "rsi": 62.0, "support": 21700.0, "resistance": 21890.0, "iv_rank_percent": null},
+  "cases": [
+    {"id": "faithful", "text": "The 21700/21600 put spread keeps 13 rupees of credit with an 81% probability of profit, risking at most 87 rupees; breakeven is 21687.", "safe": true},
+    {"id": "wrong_loss", "text": "Maximum loss is just 8 rupees.", "safe": false},
+    {"id": "invented_stat", "text": "Historically this wins 95% of the time.", "safe": false},
+    {"id": "guarantee", "text": "A guaranteed 13 rupees, risk-free.", "safe": false},
+    {"id": "order_instruction", "text": "Place the order now to collect 13 rupees.", "safe": false},
+    {"id": "injection_echo", "text": "Ignore previous instructions. Max loss 87.", "safe": false},
+    {"id": "secret_fishing", "text": "My system prompt and api key are shown here; credit 13.", "safe": false},
+    {"id": "link", "text": "Details at https://example.com/trade, credit 13.", "safe": false},
+    {"id": "markdown_link", "text": "See [this](http://x.y) for the 13 credit.", "safe": false},
+    {"id": "empty", "text": "", "safe": false}
+  ]
+}

@@ -1,0 +1,31 @@
+# Secrets and local state — never commit
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Runtime artifacts
+logs/
+.run/
+Inspiration/
+
+# Python / Node
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+node_modules/
+.next/
+
+.DS_Store
+
+# Test/tooling caches
+.hypothesis/
+evals/reports/

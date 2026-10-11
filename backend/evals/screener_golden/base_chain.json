@@ -1,0 +1,16 @@
+{
+  "name": "base_chain",
+  "note": "Expected values are hand-computed from the chain below (width 100, short delta target 0.20).",
+  "snapshot": {
+    "spot": 21834.5, "t_years": 0.0137, "data_source": "live", "history": "none",
+    "chain": [
+      [21600, "PE", 14, 0.16, -0.10], [21700, "PE", 27, 0.152, -0.19], [21800, "PE", 45, 0.148, -0.25],
+      [22000, "CE", 45, 0.141, 0.20], [22100, "CE", 23, 0.136, 0.11], [22200, "CE", 10, 0.128, 0.05]
+    ]
+  },
+  "expected": {
+    "bull_put_spread": {"short": 21700, "long": 21600, "max_profit": 13.0, "max_loss": 87.0, "breakeven": 21687.0, "pop": 0.81},
+    "bear_call_spread": {"short": 22000, "long": 22100, "max_profit": 22.0, "max_loss": 78.0, "breakeven": 22022.0, "pop": 0.80},
+    "iron_condor": {"max_profit": 35.0, "max_loss": 65.0, "breakeven_lower": 21665.0, "breakeven": 22035.0, "pop": 0.61}
+  }
+}

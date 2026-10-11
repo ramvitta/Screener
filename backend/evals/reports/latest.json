@@ -1,0 +1,50 @@
+{
+  "pricing": {
+    "cases": 200,
+    "max_abs_error": {
+      "price": 3.637978807091713e-12,
+      "delta": 4.94879281414673e-05,
+      "gamma": 4.996474886469481e-06,
+      "theta": 0.004981623413584657,
+      "vega": 0.004985014678633215
+    },
+    "max_rel_price_error": 3.845438472367026e-14,
+    "passed": true
+  },
+  "screener": {
+    "cases": 4,
+    "pass_rate": 1.0,
+    "invariant_violations": 0,
+    "signals_checked": 5,
+    "details": [
+      {
+        "case": "base_chain",
+        "passed": true,
+        "failures": []
+      },
+      {
+        "case": "crossed_market",
+        "passed": true,
+        "failures": []
+      },
+      {
+        "case": "missing_put_wing",
+        "passed": true,
+        "failures": []
+      },
+      {
+        "case": "zero_prices",
+        "passed": true,
+        "failures": []
+      }
+    ],
+    "passed": true
+  },
+  "reason": {
+    "cases": 10,
+    "unsafe_accepted": 0,
+    "safe_rejected": 0,
+    "details": [],
+    "passed": true
+  }
+}
