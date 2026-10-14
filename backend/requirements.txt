@@ -1,6 +1,6 @@
 # Pinned for reproducible, auditable installs. Update deliberately and run
 # `pip-audit -r requirements.txt` + the full test/eval suite afterwards.
-fastapi==0.128.8
+fastapi==0.143.0
 uvicorn[standard]==0.39.0
 pydantic==2.13.5
 pydantic-settings==2.11.0
