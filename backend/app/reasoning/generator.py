@@ -1,5 +1,10 @@
 """LLM "Reason for Trade" — optional, off by default, and never in the money path.
 
+Provider-neutral: talks to any OpenAI-compatible /chat/completions endpoint
+(Ollama cloud, OpenAI, Groq, OpenRouter, local Ollama, ...) via httpx, keyed by
+llm_api_key + llm_api_base_url. The same _chat() seam can later power a
+"decision model" that filters trades on explicit criteria.
+
 Design guardrails:
 * The prompt contains ONLY numbers/enums the engine computed (see build_facts).
   No notes, journal text, account ids or other user/PII text can reach the
@@ -18,7 +23,7 @@ import json
 import logging
 from typing import Dict, List, Optional
 
-import anthropic
+import httpx
 
 from app.config import settings
 from app.core.logging import register_secret
@@ -69,26 +74,31 @@ def build_facts(signal: ScreenerSignal, snapshot: OptionChainSnapshot) -> Dict[s
     return facts
 
 
-def _client() -> anthropic.AsyncAnthropic:
-    return anthropic.AsyncAnthropic(
-        api_key=settings.anthropic_api_key,
+async def _chat(messages: List[Dict[str, str]]) -> Optional[str]:
+    """One OpenAI-compatible /chat/completions call; returns the assistant text
+    or None on empty/refusal. Any endpoint speaking the OpenAI protocol works."""
+    async with httpx.AsyncClient(
+        base_url=settings.llm_api_base_url,
         timeout=settings.llm_reason_timeout_seconds,
-        max_retries=1,
-    )
-
-
-async def _ask_model(facts: Dict[str, object]) -> Optional[str]:
-    response = await _client().messages.create(
-        model=settings.llm_reason_model,
-        max_tokens=500,
-        system=SYSTEM_PROMPT,
-        output_config={"effort": "low"},
-        messages=[{"role": "user", "content": json.dumps(facts, sort_keys=True)}],
-    )
-    if response.stop_reason == "refusal":
-        logger.warning("Reason-for-trade: model declined (%s)", getattr(response.stop_details, "category", None))
+    ) as client:
+        response = await client.post(
+            "/chat/completions",
+            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+            json={
+                "model": settings.llm_reason_model,
+                "messages": messages,
+                "max_tokens": 500,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+    choices = data.get("choices") or []
+    if not choices:
         return None
-    return "".join(block.text for block in response.content if block.type == "text").strip() or None
+    content = (choices[0].get("message") or {}).get("content")
+    if not isinstance(content, str):
+        return None
+    return content.strip() or None
 
 
 async def llm_reason(signal: ScreenerSignal, snapshot: OptionChainSnapshot) -> Optional[str]:
@@ -98,8 +108,11 @@ async def llm_reason(signal: ScreenerSignal, snapshot: OptionChainSnapshot) -> O
     if key in _cache:
         return _cache[key]
     try:
-        text = await _ask_model(facts)
-    except anthropic.APIError as exc:
+        text = await _chat([
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(facts, sort_keys=True)},
+        ])
+    except httpx.HTTPError as exc:
         logger.warning("Reason-for-trade: API error (%s) — using template", type(exc).__name__)
         return None
     except Exception as exc:  # noqa: BLE001 — never let an LLM failure break the screener
@@ -120,9 +133,9 @@ async def llm_reason(signal: ScreenerSignal, snapshot: OptionChainSnapshot) -> O
 async def enrich_reasons(signals: List[ScreenerSignal], snapshot: OptionChainSnapshot) -> List[ScreenerSignal]:
     """Replaces template reasons with validated model text where possible.
     Disabled unless LLM_REASON_ENABLED and an API key are configured."""
-    if not (settings.llm_reason_enabled and settings.anthropic_api_key):
+    if not (settings.llm_reason_enabled and settings.llm_api_key):
         return signals
-    register_secret(settings.anthropic_api_key)
+    register_secret(settings.llm_api_key)
     head, tail = signals[: settings.llm_reason_max_signals], signals[settings.llm_reason_max_signals :]
     results = await asyncio.gather(*(llm_reason(s, snapshot) for s in head))
     enriched = [

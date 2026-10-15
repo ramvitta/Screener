@@ -17,4 +17,3 @@ typing_extensions==4.16.0
 # Optional "Reason for Trade" LLM feature (LLM_REASON_ENABLED, off by default).
 # Imported unconditionally by app/reasoning/generator.py, so it must be present
 # even though the feature itself is gated at runtime.
-anthropic==1.14.0

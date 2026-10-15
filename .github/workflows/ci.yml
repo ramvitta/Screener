@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-      - run: pip install -r requirements-dev.txt anthropic
+      - run: pip install -r requirements-dev.txt
       - name: Lint (includes bandit-style security rules)
         run: ruff check app tests evals
       - name: Tests + coverage (80% overall)

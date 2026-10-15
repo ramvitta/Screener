@@ -10,6 +10,6 @@
 | Positions, legs, P&L | `app.db` → `position_logs`, `position_legs` | Financial | Server-owned P&L (Decimal, paise); every money event hash-chained in `audit_log` (append-only triggers) |
 | Notes / journal free text | `position_logs.notes` | May contain PII | Length-capped (2000); never sent to the LLM; never logged |
 | Logs | `logs/backend.log` (rotating, 5 MB x 3) | Medium | JSON, request ids, redacted at the handler level |
-| LLM prompts (optional feature) | Anthropic API | Medium | Contains only engine-computed market numbers (`reasoning/generator.py::build_facts`) |
+| LLM prompts (optional feature) | OpenAI-compatible LLM API (provider-neutral) | Medium | Contains only engine-computed market numbers (`reasoning/generator.py::build_facts`) |
 
 Retention: broker sessions purged after `SESSIONS_RETENTION_HOURS` (24h) once expired/inactive; logs rotate (3 x 5 MB). `audit_log` is intentionally never purged.

@@ -52,7 +52,7 @@ def register_settings_secrets(s) -> None:
         "clickhouse_password",
         "api_auth_token",
         "session_encryption_key",
-        "anthropic_api_key",
+        "llm_api_key",
     ):
         register_secret(getattr(s, name, ""))
 

@@ -13,14 +13,24 @@ from app.screener import engine
 from app.screener.engine import ScreenerParams
 from tests.unit.test_engine import chain
 
-API = "https://api.anthropic.com/v1/messages"
+# OpenAI-compatible endpoint (provider-neutral: Ollama cloud / OpenAI / Groq / ...)
+API = "https://api.openai.com/v1/chat/completions"
+KEY = "sk-test-llm-key-1234567890"
 
 
-def message(text, stop_reason="end_turn"):
+def message(text, finish_reason="stop"):
     return {
-        "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
-        "content": [{"type": "text", "text": text}], "stop_reason": stop_reason, "stop_sequence": None,
-        "usage": {"input_tokens": 10, "output_tokens": 10},
+        "id": "chatcmpl-test",
+        "object": "chat.completion",
+        "model": settings.llm_reason_model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": text},
+                "finish_reason": finish_reason,
+            }
+        ],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
     }
 
 
@@ -37,7 +47,8 @@ def signals(snap):
 @pytest.fixture
 def llm_on(monkeypatch):
     monkeypatch.setattr(settings, "llm_reason_enabled", True)
-    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-key-1234567890")
+    monkeypatch.setattr(settings, "llm_api_key", KEY)
+    monkeypatch.setattr(settings, "llm_api_base_url", "https://api.openai.com/v1")
     generator._cache.clear()
 
 
@@ -99,7 +110,8 @@ async def test_valid_model_text_is_used(signals, snap, llm_on):
     # system prompt + only the closed facts were sent
     sent = json.loads(respx.calls[0].request.content)
     assert sent["model"] == settings.llm_reason_model and "tools" not in sent
-    assert json.loads(sent["messages"][0]["content"])["strategy"] == "bull_put_spread"
+    assert sent["messages"][0]["role"] == "system"
+    assert json.loads(sent["messages"][1]["content"])["strategy"] == "bull_put_spread"
 
 
 @respx.mock
@@ -114,10 +126,12 @@ async def test_unfaithful_text_falls_back_to_template(signals, snap, llm_on, bad
 @respx.mock
 async def test_refusal_and_api_errors_fall_back(signals, snap, llm_on):
     target = put_spread(signals)
-    respx.post(API).mock(return_value=httpx.Response(200, json={**message("", "refusal"), "stop_details": {"type": "refusal", "category": "cyber", "explanation": None}}))
+    # Empty content (provider refusal) -> template
+    respx.post(API).mock(return_value=httpx.Response(200, json=message("")))
     assert (await generator.enrich_reasons([target], snap))[0].reason_source == "template"
     generator._cache.clear()
-    respx.post(API).mock(return_value=httpx.Response(500, json={"type": "error", "error": {"type": "api_error", "message": "boom"}}))
+    # HTTP 500 -> template
+    respx.post(API).mock(return_value=httpx.Response(500, json={"error": {"message": "boom"}}))
     assert (await generator.enrich_reasons([target], snap))[0].reason_source == "template"
 
 
@@ -137,7 +151,8 @@ async def test_api_key_never_logged(signals, snap, llm_on, caplog):
     from app.core.logging import RedactingFilter
 
     caplog.handler.addFilter(RedactingFilter())
-    respx.post(API).mock(return_value=httpx.Response(401, json={"type": "error", "error": {"type": "authentication_error", "message": "invalid x-api-key sk-ant-test-key-1234567890"}}))
+    # Provider echoes the key back in an auth-error body
+    respx.post(API).mock(return_value=httpx.Response(401, json={"error": {"message": f"invalid api key {KEY}"}}))
     with caplog.at_level(logging.DEBUG):
         await generator.enrich_reasons([put_spread(signals)], snap)
-    assert "sk-ant-test-key-1234567890" not in "\n".join(r.getMessage() for r in caplog.records)
+    assert KEY not in "\n".join(r.getMessage() for r in caplog.records)

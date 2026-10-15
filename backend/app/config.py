@@ -39,9 +39,12 @@ class Settings(BaseSettings):
     max_signal_age_seconds: int = 900
 
     # --- LLM "Reason for Trade" (off by default) ---
+    # Provider-neutral: any OpenAI-compatible /chat/completions endpoint
+    # (OpenAI, Ollama cloud, Groq, OpenRouter, local Ollama, ...).
     llm_reason_enabled: bool = False
-    anthropic_api_key: str = ""
-    llm_reason_model: str = "claude-opus-5-5"
+    llm_api_key: str = ""
+    llm_api_base_url: str = "https://api.openai.com/v1"
+    llm_reason_model: str = "gpt-4o-mini"
     llm_reason_max_signals: int = 5  # cost cap per screener run
     llm_reason_timeout_seconds: float = 20.0
 
