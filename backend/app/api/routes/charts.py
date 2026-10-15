@@ -25,6 +25,12 @@ MARKET_OPEN = (9, 15)
 MARKET_CLOSE = (15, 30)
 VALID_INTERVALS = {1, 3, 5, 10, 15, 30, 60}
 
+# Safety cap for a single series' Renko/P&F output. Adaptive percent-of-price
+# boxes already avoid the fixed-box blowup; this is the belt-and-suspenders
+# net that auto-widens the box until the count fits, then hard-truncates.
+MAX_BRICKS = 3000
+MAX_BOX_BUMPS = 8  # doubling box_pct up to 8× → 256× the requested box
+
 
 def _resample(candles: List[Candle], interval_minutes: int) -> List[Candle]:
     """Aggregates 1-min candles into `interval_minutes` buckets — Definedge's
@@ -277,19 +283,39 @@ class TransformsRequest(BaseModel):
 
 
 def _transform_candles(candles: List[Candle], box_pct: float, reversal: int, interval: int) -> dict:
-    """Reference price, box size, and the three views (resampled candlesticks
+    """Reference price, box info, and the three views (resampled candlesticks
     + Renko + P&F) for one series. Renko/P&F always use the 1-min base
-    (independent of the candlestick interval) per FEATURE_CHARTS_PLAN.md §8."""
+    (independent of the candlestick interval) per FEATURE_CHARTS_PLAN.md §8.
+
+    Renko/P&F use an adaptive percent-of-price box (`box_pct%` of the current
+    price level, recomputed as bricks/columns form). If a series still yields
+    more than `MAX_BRICKS`, the box percentage is doubled until it fits (the
+    effective `box_pct` is reported back), with a final hard truncation as a
+    last resort."""
     if not candles:
-        return {"reference_price": None, "box_size": None, "candles": [], "renko": [], "pnf": []}
+        return {
+            "reference_price": None, "box_size": None, "box_pct": None,
+            "candles": [], "renko": [], "pnf": [],
+        }
     reference = abs(candles[-1]["close"])
-    box = box_size_from_pct(reference, box_pct)
+
+    effective = box_pct
+    renko: List[dict] = []
+    pnf: List[dict] = []
+    for _ in range(MAX_BOX_BUMPS + 1):
+        renko = build_renko(candles, effective, reversal)
+        pnf = build_point_and_figure(candles, effective, reversal)
+        if len(renko) <= MAX_BRICKS and len(pnf) <= MAX_BRICKS:
+            break
+        effective *= 2.0
+
     return {
         "reference_price": reference,
-        "box_size": box,
+        "box_size": box_size_from_pct(reference, effective),
+        "box_pct": effective,
         "candles": _resample(candles, interval),
-        "renko": build_renko(candles, box, reversal),
-        "pnf": build_point_and_figure(candles, box, reversal),
+        "renko": renko[:MAX_BRICKS],
+        "pnf": pnf[:MAX_BRICKS],
     }
 
 
@@ -311,6 +337,7 @@ def _build_series(
         "expiry": expiry.isoformat() if expiry else None,
         "reference_price": t["reference_price"],
         "box_size": t["box_size"],
+        "box_pct": t["box_pct"],
         "candles": t["candles"],
         "renko": t["renko"],
         "pnf": t["pnf"],

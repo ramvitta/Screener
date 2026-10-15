@@ -1,7 +1,7 @@
-"""Deterministic tests for the pure Renko / Point & Figure transforms.
-
-Property (hypothesis) invariants live in tests/property/test_renko_pnf_props.py;
-this file pins exact outputs and edge cases.
+"""Deterministic tests for the pure Renko / Point & Figure transforms using an
+adaptive percent-of-price box. Property (hypothesis) invariants live in
+tests/property/test_renko_pnf_props.py; this file pins structural behaviour and
+edge cases.
 """
 
 from datetime import datetime, timedelta
@@ -12,6 +12,12 @@ from app.charts.transforms import box_size_from_pct, build_point_and_figure, bui
 from app.integrations.definedge_client import Candle
 
 _BASE = datetime(2024, 1, 1, 9, 15)
+_PCT = 1.0  # 1% of price → a box of ~1.0 around price 100
+
+
+def _box_at(price: float, pct: float = _PCT) -> float:
+    """Mirror of the backend's adaptive box: `pct%` of the price magnitude."""
+    return (pct / 100.0) * abs(price)
 
 
 def _candle(i: int, close: float, high: float | None = None, low: float | None = None, open_: float | None = None) -> Candle:
@@ -52,9 +58,9 @@ def test_box_size_from_pct():
 
 
 def test_renko_empty_and_single():
-    assert build_renko([], 1.0, 3) == []
+    assert build_renko([], _PCT, 3) == []
     # A single candle only anchors; no brick can form from one bar.
-    assert build_renko(_closes([100.0]), 1.0, 3) == []
+    assert build_renko(_closes([100.0]), _PCT, 3) == []
 
 
 def test_renko_rejects_bad_box():
@@ -65,52 +71,48 @@ def test_renko_rejects_bad_box():
 
 
 def test_renko_up_bricks_tile_without_double_count():
-    # A single candle closing 5 boxes above the anchor forms exactly 5 up
-    # bricks (no double counting), each one box tall, tiling contiguously.
-    bricks = build_renko(_closes([100.0, 105.0]), 1.0, 3)
-    assert len(bricks) == 5
+    bricks = build_renko(_closes([100.0, 105.0]), _PCT, 3)
+    assert bricks
+    # Every brick is an up brick, one adaptive box tall (box = 1% of its low
+    # edge), tiling contiguously (no gap, no overlap → no double counting).
     for br in bricks:
         assert br["close"] > br["open"]
-        assert br["high"] - br["low"] == pytest.approx(1.0)
+        assert br["high"] - br["low"] == pytest.approx(_box_at(br["low"]))
     for a, b in zip(bricks, bricks[1:]):
-        assert a["high"] == b["low"]
+        assert a["high"] == pytest.approx(b["low"])
 
 
-def test_renko_reversal_requires_reversal_times_box():
-    # Up 100→103 (three 1-box bricks), then retrace. A retrace of 2 boxes is
-    # not enough (reversal=3); a full 3-box retrace forms one reversal brick.
-    bricks = build_renko(_closes([100.0, 101.0, 102.0, 103.0, 101.0]), 1.0, 3)
-    assert len(bricks) == 3  # 100→103, the 2-box retrace to 101 is ignored
-    assert all(br["close"] > br["open"] for br in bricks)
+def test_renko_reversal_brick_spans_reversal_times_box():
+    bricks = build_renko(_closes([100.0, 105.0, 100.0]), _PCT, 3)
+    assert bricks[0]["close"] > bricks[0]["open"]  # up trend first
+    assert bricks[-1]["close"] < bricks[-1]["open"]  # reversal brick last
+    # A reversal brick spans `reversal` adaptive boxes at its (high) edge.
+    assert bricks[-1]["high"] - bricks[-1]["low"] == pytest.approx(3 * _box_at(bricks[-1]["high"]))
 
-    bricks = build_renko(_closes([100.0, 101.0, 102.0, 103.0, 100.0]), 1.0, 3)
-    assert len(bricks) == 4  # three up bricks + one reversal brick
-    reversal = bricks[-1]
-    assert reversal["close"] < reversal["open"]
-    assert reversal["high"] - reversal["low"] == pytest.approx(3.0)  # reversal × box
-    assert reversal["open"] == pytest.approx(103.0)
-    assert reversal["close"] == pytest.approx(100.0)
+
+def test_renko_ignores_sub_reversal_retrace():
+    # 103 → 101 is a 2-box retrace (below reversal=3): absorbed, no down brick.
+    bricks = build_renko(_closes([100.0, 101.0, 102.0, 103.0, 101.0]), _PCT, 3)
+    assert bricks and all(br["close"] > br["open"] for br in bricks)
 
 
 def test_renko_down_trend_and_reversal_up():
-    bricks = build_renko(_closes([100.0, 99.0, 98.0]), 1.0, 3)
-    assert len(bricks) == 2
-    assert all(br["close"] < br["open"] for br in bricks)
+    bricks = build_renko(_closes([100.0, 95.0]), _PCT, 3)
+    assert bricks and all(br["close"] < br["open"] for br in bricks)
 
 
 def test_renko_time_is_source_bar():
-    bricks = build_renko(_closes([100.0, 101.0, 102.0]), 1.0, 3)
-    # Brick for the 100→101 move carries bar index 1's time; 101→102 carries bar 2's.
+    bricks = build_renko(_closes([100.0, 102.0]), _PCT, 3)
+    # The 100→102 move forms the first brick on bar 1.
     assert bricks[0]["time"] == to_utc_seconds((_BASE + timedelta(minutes=1)).isoformat())
-    assert bricks[1]["time"] == to_utc_seconds((_BASE + timedelta(minutes=2)).isoformat())
 
 
 # --- Point & Figure ---
 
 
 def test_pnf_empty_and_single():
-    assert build_point_and_figure([], 1.0, 3) == []
-    assert build_point_and_figure(_closes([100.0]), 1.0, 3) == []
+    assert build_point_and_figure([], _PCT, 3) == []
+    assert build_point_and_figure(_closes([100.0]), _PCT, 3) == []
 
 
 def test_pnf_rejects_bad_box():
@@ -124,7 +126,7 @@ def test_pnf_single_x_column_exact():
         _candle(1, close=100.0, high=101.0, low=100.0),  # establish X
         _candle(2, close=101.0, high=102.0, low=101.0),  # extend to top=102
     ]
-    columns = build_point_and_figure(candles, 1.0, 3)
+    columns = build_point_and_figure(candles, _PCT, 3)
     assert len(columns) == 1
     col = columns[0]
     assert col["close"] >= col["open"]  # X
@@ -132,11 +134,11 @@ def test_pnf_single_x_column_exact():
     assert col["close"] == pytest.approx(103.0)  # (top+1)*box = 103
     assert col["low"] == pytest.approx(100.0)
     assert col["high"] == pytest.approx(103.0)
-    assert col["boxSize"] == pytest.approx(1.0)
+    assert col["boxSize"] == pytest.approx(_box_at(100.0))  # box fixed at establishment price
     assert col["boxes"] == 3
 
 
-def test_pnf_reversal_exact_columns():
+def test_pnf_reversal_produces_two_columns():
     candles = [
         _candle(0, close=100.0),  # anchor top=bot=100
         _candle(1, close=100.0, high=101.0, low=100.0),  # establish X, top=101
@@ -144,11 +146,11 @@ def test_pnf_reversal_exact_columns():
         _candle(3, close=102.0, high=103.0, low=102.0),  # extend X, top=103
         _candle(4, close=100.0, high=100.0, low=100.0),  # 3-box reversal → O
     ]
-    columns = build_point_and_figure(candles, 1.0, 3)
+    columns = build_point_and_figure(candles, _PCT, 3)
     assert len(columns) == 2
 
     x_col, o_col = columns
-    # X column: boxes 100..103 (4 boxes), emitted at the reversal bar.
+    # X column: boxes 100..103 (4 boxes).
     assert x_col["close"] >= x_col["open"]
     assert x_col["low"] == pytest.approx(100.0)
     assert x_col["high"] == pytest.approx(104.0)
@@ -162,11 +164,16 @@ def test_pnf_reversal_exact_columns():
     assert o_col["open"] == pytest.approx(103.0)
     assert o_col["close"] == pytest.approx(100.0)
 
+    # Each column's geometry is internally consistent with its own box.
+    for col in columns:
+        assert col["high"] - col["low"] == pytest.approx(col["boxes"] * col["boxSize"])
+        assert col["boxSize"] > 0
+
 
 def test_pnf_column_time_is_establishment_bar():
     candles = [
         _candle(0, close=100.0),
         _candle(1, close=100.0, high=101.0, low=100.0),
     ]
-    columns = build_point_and_figure(candles, 1.0, 3)
+    columns = build_point_and_figure(candles, _PCT, 3)
     assert columns[0]["time"] == to_utc_seconds((_BASE + timedelta(minutes=1)).isoformat())

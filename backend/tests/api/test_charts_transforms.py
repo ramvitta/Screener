@@ -74,6 +74,7 @@ def test_transforms_shape_and_box_defaults(client, auth, transforms_broker):
     future = series["future"]
     assert future["reference_price"] == pytest.approx(23145.0)
     assert future["box_size"] == pytest.approx(23.145)
+    assert future["box_pct"] == pytest.approx(0.1)  # no cap triggered on this data
     assert len(future["candles"]) == 6  # 30 × 1-min resampled to 5-min
     assert isinstance(future["renko"], list) and isinstance(future["pnf"], list)
 
@@ -81,16 +82,19 @@ def test_transforms_shape_and_box_defaults(client, auth, transforms_broker):
     sell, buy = series["legs"]
     assert sell["strike"] == 21800 and sell["box_size"] == pytest.approx(0.229)
     assert buy["strike"] == 21700 and buy["box_size"] == pytest.approx(0.129)
+    assert sell["box_pct"] == pytest.approx(0.1)
+    assert buy["box_pct"] == pytest.approx(0.1)
 
     # combined: net credit -100 → ref 100, box 0.5% = 0.5
     combined = series["combined"]
     assert combined is not None
     assert combined["reference_price"] == pytest.approx(100.0)
     assert combined["box_size"] == pytest.approx(0.5)
+    assert combined["box_pct"] == pytest.approx(0.5)
 
-    # every series exposes the three views
+    # every series exposes the three views + box metadata
     for s in [future, sell, buy, combined]:
-        for key in ("candles", "renko", "pnf", "box_size", "reference_price"):
+        for key in ("candles", "renko", "pnf", "box_size", "box_pct", "reference_price"):
             assert key in s
 
 
@@ -104,7 +108,9 @@ def test_transforms_box_and_reversal_override(client, auth, transforms_broker):
     data = r.json()
     assert data["reversal"] == 2
     assert data["series"]["future"]["box_size"] == pytest.approx(23145.0 * 0.0025)
+    assert data["series"]["future"]["box_pct"] == pytest.approx(0.25)
     assert data["series"]["combined"]["box_size"] == pytest.approx(100.0 * 0.01)
+    assert data["series"]["combined"]["box_pct"] == pytest.approx(1.0)
 
 
 def test_transforms_empty_candles_are_null_box(client, auth, transforms_broker, monkeypatch):
@@ -116,7 +122,7 @@ def test_transforms_empty_candles_are_null_box(client, auth, transforms_broker, 
     assert r.status_code == 200
     future = r.json()["series"]["future"]
     assert future["candles"] == [] and future["renko"] == [] and future["pnf"] == []
-    assert future["box_size"] is None and future["reference_price"] is None
+    assert future["box_size"] is None and future["box_pct"] is None and future["reference_price"] is None
 
 
 @pytest.mark.parametrize(

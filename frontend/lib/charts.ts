@@ -36,6 +36,9 @@ export interface ChartTransformSeries {
   expiry: string | null;
   reference_price: number | null;
   box_size: number | null;
+  /** Effective box percentage actually used (after the backend's brick cap
+   *  auto-widens it); this may exceed the requested value for volatile series. */
+  box_pct: number | null;
   candles: Candle[];
   renko: OpenAlgoBar[];
   pnf: PointFigureColumn[];
