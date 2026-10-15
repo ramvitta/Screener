@@ -6,7 +6,7 @@ import SignalChartPanel from "./SignalChartPanel";
 import { fetchScreenerSignals, fetchChartTransforms } from "@/lib/api";
 import { daysToExpiry, formatCurrency, formatDate, formatPct, formatRatio, formatStrategyLabel, riskAdjustedReturn } from "@/lib/format";
 import type { ScreenerSignal } from "@/lib/types";
-import { BOX_PRESETS, CHART_INTERVALS, DEFAULT_BOX_PCT, DEFAULT_COMBINED_BOX_PCT, DEFAULT_REVERSAL, type ChartInterval, type ChartTransformsResponse } from "@/lib/charts";
+import { BOX_PRESETS, CHART_INTERVALS, DEFAULT_FUTURE_BOX_PCT, DEFAULT_OPTION_BOX_PCT, DEFAULT_COMBINED_BOX_PCT, DEFAULT_REVERSAL, type ChartInterval, type ChartTransformsResponse } from "@/lib/charts";
 
 const STRATEGY_LABELS: ScreenerSignal["strategy_type"][] = ["bull_put_spread", "bear_call_spread", "iron_condor"];
 
@@ -16,7 +16,8 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
   const [charts, setCharts] = useState<ChartTransformsResponse | null>(null);
   const [chartsError, setChartsError] = useState<string | null>(null);
   const [intervalMinutes, setIntervalMinutes] = useState<ChartInterval>(5);
-  const [boxPct, setBoxPct] = useState<number>(DEFAULT_BOX_PCT);
+  const [futureBoxPct, setFutureBoxPct] = useState<number>(DEFAULT_FUTURE_BOX_PCT);
+  const [optionBoxPct, setOptionBoxPct] = useState<number>(DEFAULT_OPTION_BOX_PCT);
   const [combinedBoxPct, setCombinedBoxPct] = useState<number>(DEFAULT_COMBINED_BOX_PCT);
   const [reversal, setReversal] = useState<number>(DEFAULT_REVERSAL);
 
@@ -48,7 +49,8 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
       try {
         const data = await fetchChartTransforms(signal!, {
           interval: intervalMinutes,
-          boxPct,
+          futureBoxPct,
+          optionBoxPct,
           combinedBoxPct,
           reversal,
         });
@@ -70,7 +72,7 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal?.signal_id, intervalMinutes, boxPct, combinedBoxPct, reversal]);
+  }, [signal?.signal_id, intervalMinutes, futureBoxPct, optionBoxPct, combinedBoxPct, reversal]);
 
   const expiryChips = useMemo(() => {
     const seen = new Set<string>();
@@ -241,16 +243,33 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
                 ))}
               </div>
               <div className="flex items-center gap-1.5 rounded-[7px] bg-[#171C23] p-[3px]">
-                <span className="pl-1 text-[9px] uppercase tracking-wide text-[#8B96A5]" title="Box size for the future and each option leg">Box</span>
+                <span className="pl-1 text-[9px] uppercase tracking-wide text-[#8B96A5]" title="Box size (% of price) for the future">Future</span>
                 {BOX_PRESETS.map((p) => (
                   <button
                     key={p}
-                    onClick={() => setBoxPct(p)}
+                    onClick={() => setFutureBoxPct(p)}
                     className="rounded-[5px] px-2 py-1 text-[10px]"
                     style={{
-                      background: boxPct === p ? "#232C36" : "transparent",
-                      color: boxPct === p ? "#E8EAED" : "#8B96A5",
-                      fontWeight: boxPct === p ? 600 : 400,
+                      background: futureBoxPct === p ? "#232C36" : "transparent",
+                      color: futureBoxPct === p ? "#E8EAED" : "#8B96A5",
+                      fontWeight: futureBoxPct === p ? 600 : 400,
+                    }}
+                  >
+                    {p}%
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 rounded-[7px] bg-[#171C23] p-[3px]">
+                <span className="pl-1 text-[9px] uppercase tracking-wide text-[#8B96A5]" title="Box size (% of price) for each option leg">Options</span>
+                {BOX_PRESETS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setOptionBoxPct(p)}
+                    className="rounded-[5px] px-2 py-1 text-[10px]"
+                    style={{
+                      background: optionBoxPct === p ? "#232C36" : "transparent",
+                      color: optionBoxPct === p ? "#E8EAED" : "#8B96A5",
+                      fontWeight: optionBoxPct === p ? 600 : 400,
                     }}
                   >
                     {p}%

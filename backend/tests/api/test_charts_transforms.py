@@ -78,12 +78,12 @@ def test_transforms_shape_and_box_defaults(client, auth, transforms_broker):
     assert len(future["candles"]) == 6  # 30 × 1-min resampled to 5-min
     assert isinstance(future["renko"], list) and isinstance(future["pnf"], list)
 
-    # legs: SELL 21800 → ref 229, BUY 21700 → ref 129 (both 0.1%)
+    # legs: SELL 21800 → ref 229, BUY 21700 → ref 129 (option_box_pct default 1%)
     sell, buy = series["legs"]
-    assert sell["strike"] == 21800 and sell["box_size"] == pytest.approx(0.229)
-    assert buy["strike"] == 21700 and buy["box_size"] == pytest.approx(0.129)
-    assert sell["box_pct"] == pytest.approx(0.1)
-    assert buy["box_pct"] == pytest.approx(0.1)
+    assert sell["strike"] == 21800 and sell["box_size"] == pytest.approx(2.29)
+    assert buy["strike"] == 21700 and buy["box_size"] == pytest.approx(1.29)
+    assert sell["box_pct"] == pytest.approx(1.0)
+    assert buy["box_pct"] == pytest.approx(1.0)
 
     # combined: net credit -100 → ref 100, box 0.5% = 0.5
     combined = series["combined"]
@@ -101,7 +101,7 @@ def test_transforms_shape_and_box_defaults(client, auth, transforms_broker):
 def test_transforms_box_and_reversal_override(client, auth, transforms_broker):
     r = client.post(
         "/api/v1/charts/transforms",
-        json=_body(box_pct=0.25, combined_box_pct=1.0, reversal=2),
+        json=_body(future_box_pct=0.25, option_box_pct=0.5, combined_box_pct=1.0, reversal=2),
         headers=auth,
     )
     assert r.status_code == 200
@@ -109,6 +109,11 @@ def test_transforms_box_and_reversal_override(client, auth, transforms_broker):
     assert data["reversal"] == 2
     assert data["series"]["future"]["box_size"] == pytest.approx(23145.0 * 0.0025)
     assert data["series"]["future"]["box_pct"] == pytest.approx(0.25)
+    sell, buy = data["series"]["legs"]
+    assert sell["box_size"] == pytest.approx(229.0 * 0.005)
+    assert sell["box_pct"] == pytest.approx(0.5)
+    assert buy["box_size"] == pytest.approx(129.0 * 0.005)
+    assert buy["box_pct"] == pytest.approx(0.5)
     assert data["series"]["combined"]["box_size"] == pytest.approx(100.0 * 0.01)
     assert data["series"]["combined"]["box_pct"] == pytest.approx(1.0)
 
@@ -129,8 +134,9 @@ def test_transforms_empty_candles_are_null_box(client, auth, transforms_broker, 
     "body, detail",
     [
         (_body(legs=[]), "At least one leg is required"),
-        (_body(box_pct=0.0), "box_pct and combined_box_pct must be positive"),
-        (_body(combined_box_pct=-1.0), "box_pct and combined_box_pct must be positive"),
+        (_body(future_box_pct=0.0), "future_box_pct, option_box_pct and combined_box_pct must be positive"),
+        (_body(option_box_pct=0.0), "future_box_pct, option_box_pct and combined_box_pct must be positive"),
+        (_body(combined_box_pct=-1.0), "future_box_pct, option_box_pct and combined_box_pct must be positive"),
         (_body(reversal=0), "reversal must be >= 1"),
     ],
 )

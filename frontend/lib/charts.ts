@@ -60,9 +60,10 @@ export const CHART_TYPES = ["point-figure", "renko", "candlestick"] as const;
 export type ChartType = (typeof CHART_TYPES)[number];
 export const DEFAULT_CHART_TYPE: ChartType = "point-figure";
 
-/** Box-size presets (% of reference price) and defaults (FEATURE_CHARTS_PLAN.md §8). */
+/** Box-size presets (% of reference price) and per-instrument defaults (FEATURE_CHARTS_PLAN.md §8). */
 export const BOX_PRESETS = [0.1, 0.25, 0.5, 1, 3] as const;
-export const DEFAULT_BOX_PCT = 0.1;
+export const DEFAULT_FUTURE_BOX_PCT = 0.1;
+export const DEFAULT_OPTION_BOX_PCT = 1.0;
 export const DEFAULT_COMBINED_BOX_PCT = 0.5;
 export const DEFAULT_REVERSAL = 3;
 

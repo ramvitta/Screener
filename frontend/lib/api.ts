@@ -187,11 +187,12 @@ export async function triggerRelogin(): Promise<{ expires_at: string }> {
 /** P&F / Renko / candlestick transforms for a screener signal's actual legs
  * (POST /api/v1/charts/transforms). The Python backend computes the Renko
  * bricks and P&F columns from the fixed 1-min base; `interval` only resamples
- * the candlestick view. `boxPct`/`combinedBoxPct`/`reversal` are fetch-level
- * parameters — changing them re-fetches rather than recomputing client-side. */
+ * the candlestick view. `futureBoxPct`/`optionBoxPct`/`combinedBoxPct`/
+ * `reversal` are fetch-level parameters — changing them re-fetches rather than
+ * recomputing client-side. */
 export async function fetchChartTransforms(
   signal: Pick<ScreenerSignal, "symbol" | "expiry" | "legs">,
-  opts: { interval?: number; boxPct?: number; combinedBoxPct?: number; reversal?: number } = {},
+  opts: { interval?: number; futureBoxPct?: number; optionBoxPct?: number; combinedBoxPct?: number; reversal?: number } = {},
 ): Promise<ChartTransformsResponse> {
   const res = await fetch(`${API_BASE_URL}/api/v1/charts/transforms?interval=${opts.interval ?? 5}`, {
     method: "POST",
@@ -200,7 +201,8 @@ export async function fetchChartTransforms(
       symbol: signal.symbol,
       expiry: signal.expiry,
       legs: signal.legs.map((leg) => ({ strike: leg.strike, option_type: leg.option_type, action: leg.action })),
-      box_pct: opts.boxPct,
+      future_box_pct: opts.futureBoxPct,
+      option_box_pct: opts.optionBoxPct,
       combined_box_pct: opts.combinedBoxPct,
       reversal: opts.reversal,
     }),

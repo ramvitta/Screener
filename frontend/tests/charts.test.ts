@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   BOX_PRESETS,
   CHART_TYPES,
-  DEFAULT_BOX_PCT,
   DEFAULT_CHART_TYPE,
   DEFAULT_COMBINED_BOX_PCT,
+  DEFAULT_FUTURE_BOX_PCT,
+  DEFAULT_OPTION_BOX_PCT,
   DEFAULT_REVERSAL,
   toOpenAlgoBars,
   toUtcSeconds,
@@ -71,9 +72,10 @@ describe("chart defaults", () => {
     expect(CHART_TYPES).toEqual(["point-figure", "renko", "candlestick"]);
   });
 
-  it("ships the agreed box-size presets and defaults", () => {
+  it("ships the agreed box-size presets and per-instrument defaults", () => {
     expect(BOX_PRESETS).toEqual([0.1, 0.25, 0.5, 1, 3]);
-    expect(DEFAULT_BOX_PCT).toBe(0.1);
+    expect(DEFAULT_FUTURE_BOX_PCT).toBe(0.1);
+    expect(DEFAULT_OPTION_BOX_PCT).toBe(1.0);
     expect(DEFAULT_COMBINED_BOX_PCT).toBe(0.5);
     expect(DEFAULT_REVERSAL).toBe(3);
   });

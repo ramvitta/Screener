@@ -277,7 +277,8 @@ class TransformsRequest(BaseModel):
     symbol: str
     expiry: date
     legs: List[SignalLeg]
-    box_pct: float = 0.1
+    future_box_pct: float = 0.1
+    option_box_pct: float = 1.0
     combined_box_pct: float = 0.5
     reversal: int = 3
 
@@ -353,15 +354,17 @@ async def chart_transforms(
 
     For each series (future, legs, combined) returns raw candles resampled to
     `interval`, plus `renko` and `pnf` built from the fixed 1-min base (§8).
-    Box size defaults to `box_pct`% of each series' own reference price
-    (combined uses `combined_box_pct`); `reversal` is the P&F/Renko reversal.
+    Each instrument type has its own percent-of-price box: `future_box_pct`
+    for the future, `option_box_pct` for each option leg, and
+    `combined_box_pct` for the combined spread premium. `reversal` is the
+    P&F/Renko reversal.
     """
     if interval not in VALID_INTERVALS:
         raise HTTPException(status_code=400, detail=f"interval must be one of {sorted(VALID_INTERVALS)}")
     if not payload.legs:
         raise HTTPException(status_code=400, detail="At least one leg is required")
-    if payload.box_pct <= 0 or payload.combined_box_pct <= 0:
-        raise HTTPException(status_code=400, detail="box_pct and combined_box_pct must be positive")
+    if payload.future_box_pct <= 0 or payload.option_box_pct <= 0 or payload.combined_box_pct <= 0:
+        raise HTTPException(status_code=400, detail="future_box_pct, option_box_pct and combined_box_pct must be positive")
     if payload.reversal < 1:
         raise HTTPException(status_code=400, detail="reversal must be >= 1")
 
@@ -391,13 +394,13 @@ async def chart_transforms(
 
     future_series = _build_series(
         f"{payload.symbol}-I", future.trading_symbol, future.strike, future.expiry,
-        future_candles, payload.box_pct, payload.reversal, interval,
+        future_candles, payload.future_box_pct, payload.reversal, interval,
     )
     leg_series = [
         _build_series(
             f"{leg.action} {payload.symbol} {int(leg.strike)} {leg.option_type}",
             c.trading_symbol, c.strike, c.expiry,
-            candles, payload.box_pct, payload.reversal, interval,
+            candles, payload.option_box_pct, payload.reversal, interval,
         )
         for c, leg, candles in zip(leg_contracts, payload.legs, leg_candles, strict=True)
     ]
