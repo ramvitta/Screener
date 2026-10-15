@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import CandlestickChart from "./charts/CandlestickChart";
+import SignalChartPanel from "./SignalChartPanel";
+import SignalPayoffPanel from "./SignalPayoffPanel";
 import { fetchScreenerSignals, fetchSignalCharts } from "@/lib/api";
 import { daysToExpiry, formatCurrency, formatDate, formatPct, formatRatio, formatStrategyLabel, riskAdjustedReturn } from "@/lib/format";
 import type { ScreenerSignal } from "@/lib/types";
@@ -16,7 +17,7 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
   const [loading, setLoading] = useState(true);
   const [charts, setCharts] = useState<SignalChartsResponse | null>(null);
   const [chartsError, setChartsError] = useState<string | null>(null);
-  const [intervalMinutes, setIntervalMinutes] = useState<ChartInterval>(1);
+  const [intervalMinutes, setIntervalMinutes] = useState<ChartInterval>(5);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,25 +248,16 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
           </div>
 
           {charts ? (
-            <div className="grid min-h-0 flex-grow grid-cols-2 grid-rows-2 gap-3.5">
-              <div className="flex min-h-0 flex-col rounded-[10px] border p-3" style={{ background: "#12161C", borderColor: "#1F2630" }}>
-                <CandlestickChart series={charts.series.future} />
-              </div>
-              {charts.series.legs[0] && (
-                <div className="flex min-h-0 flex-col rounded-[10px] border p-3" style={{ background: "#12161C", borderColor: "#1F2630" }}>
-                  <CandlestickChart series={charts.series.legs[0]} />
-                </div>
-              )}
-              {charts.series.legs[1] && (
-                <div className="flex min-h-0 flex-col rounded-[10px] border p-3" style={{ background: "#12161C", borderColor: "#1F2630" }}>
-                  <CandlestickChart series={charts.series.legs[1]} />
-                </div>
-              )}
-              {charts.series.combined && (
-                <div className="flex min-h-0 flex-col rounded-[10px] border p-3" style={{ background: "#12161C", borderColor: "#1F2630" }}>
-                  <CandlestickChart series={charts.series.combined} />
-                </div>
-              )}
+            <div
+              className={`grid min-h-[480px] flex-grow gap-3.5 auto-rows-fr ${
+                1 + charts.series.legs.length + (charts.series.combined ? 1 : 0) <= 4 ? "grid-cols-2" : "grid-cols-3"
+              }`}
+            >
+              <SignalChartPanel series={charts.series.future} />
+              {charts.series.legs.map((leg, i) => (
+                <SignalChartPanel key={i} series={leg} />
+              ))}
+              {charts.series.combined && <SignalChartPanel series={charts.series.combined} />}
             </div>
           ) : (
             !chartsError && (
@@ -274,6 +266,11 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
               </div>
             )
           )}
+
+          {/* PAYOFF */}
+          <div className="mt-3.5 h-[340px] flex-shrink-0">
+            <SignalPayoffPanel signal={signal} />
+          </div>
 
           {/* LEGS TABLE */}
           <div className="mt-3.5 flex-shrink-0 rounded-[10px] border p-3" style={{ background: "#12161C", borderColor: "#1F2630" }}>
