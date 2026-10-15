@@ -4,20 +4,21 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import SignalChartPanel from "./SignalChartPanel";
 import SignalPayoffPanel from "./SignalPayoffPanel";
-import { fetchScreenerSignals, fetchSignalCharts } from "@/lib/api";
+import { fetchScreenerSignals, fetchChartTransforms } from "@/lib/api";
 import { daysToExpiry, formatCurrency, formatDate, formatPct, formatRatio, formatStrategyLabel, riskAdjustedReturn } from "@/lib/format";
 import type { ScreenerSignal } from "@/lib/types";
-import { CHART_INTERVALS, type ChartInterval, type SignalChartsResponse } from "@/lib/charts";
+import { BOX_PRESETS, CHART_INTERVALS, DEFAULT_BOX_PCT, DEFAULT_COMBINED_BOX_PCT, DEFAULT_REVERSAL, type ChartInterval, type ChartTransformsResponse } from "@/lib/charts";
 
 const STRATEGY_LABELS: ScreenerSignal["strategy_type"][] = ["bull_put_spread", "bear_call_spread", "iron_condor"];
-const CHART_POLL_MS = 30_000;
 
 export default function ContractDetailView({ signalId }: { signalId: string }) {
   const [signals, setSignals] = useState<ScreenerSignal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [charts, setCharts] = useState<SignalChartsResponse | null>(null);
+  const [charts, setCharts] = useState<ChartTransformsResponse | null>(null);
   const [chartsError, setChartsError] = useState<string | null>(null);
   const [intervalMinutes, setIntervalMinutes] = useState<ChartInterval>(5);
+  const [boxPct, setBoxPct] = useState<number>(DEFAULT_BOX_PCT);
+  const [reversal, setReversal] = useState<number>(DEFAULT_REVERSAL);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,15 +43,15 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
   useEffect(() => {
     if (!signal) return;
     let cancelled = false;
-    let isFirstRun = true;
 
-    async function poll() {
-      if (isFirstRun) {
-        setCharts(null);
-        isFirstRun = false;
-      }
+    async function load() {
       try {
-        const data = await fetchSignalCharts(signal!, intervalMinutes);
+        const data = await fetchChartTransforms(signal!, {
+          interval: intervalMinutes,
+          boxPct,
+          combinedBoxPct: DEFAULT_COMBINED_BOX_PCT,
+          reversal,
+        });
         if (!cancelled) {
           setCharts(data);
           setChartsError(null);
@@ -58,20 +59,18 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
       } catch {
         if (!cancelled) {
           setChartsError(
-            "Could not load live charts for this signal's legs — is the backend logged in to Definedge, and do these strikes/expiry still exist in the current chain?",
+            "Could not load chart transforms for this signal's legs — is the backend logged in to Definedge, and do these strikes/expiry still exist in the current chain?",
           );
         }
       }
     }
 
-    poll();
-    const interval = setInterval(poll, CHART_POLL_MS);
+    load();
     return () => {
       cancelled = true;
-      clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal?.signal_id, intervalMinutes]);
+  }, [signal?.signal_id, intervalMinutes, boxPct, reversal]);
 
   const expiryChips = useMemo(() => {
     const seen = new Set<string>();
@@ -241,6 +240,38 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
                   </button>
                 ))}
               </div>
+              <div className="flex gap-0.5 rounded-[7px] bg-[#171C23] p-[3px]">
+                {BOX_PRESETS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setBoxPct(p)}
+                    className="rounded-[5px] px-2 py-1 text-[10px]"
+                    style={{
+                      background: boxPct === p ? "#232C36" : "transparent",
+                      color: boxPct === p ? "#E8EAED" : "#8B96A5",
+                      fontWeight: boxPct === p ? 600 : 400,
+                    }}
+                  >
+                    {p}%
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-0.5 rounded-[7px] bg-[#171C23] p-[3px]">
+                {[2, 3, 4].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setReversal(r)}
+                    className="rounded-[5px] px-2 py-1 text-[10px]"
+                    style={{
+                      background: reversal === r ? "#232C36" : "transparent",
+                      color: reversal === r ? "#E8EAED" : "#8B96A5",
+                      fontWeight: reversal === r ? 600 : 400,
+                    }}
+                  >
+                    {r}×
+                  </button>
+                ))}
+              </div>
               {charts && (
                 <span>as of {new Date(charts.as_of).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
               )}
@@ -262,7 +293,7 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
           ) : (
             !chartsError && (
               <div className="flex min-h-0 flex-grow items-center justify-center text-sm text-[#8B96A5]">
-                Loading live charts…
+                Loading chart transforms…
               </div>
             )
           )}

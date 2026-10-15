@@ -24,7 +24,7 @@ import type {
   SignalHistoryItem,
   StrategyType,
 } from "./types";
-import type { SignalChartsResponse } from "./charts";
+import type { ChartTransformsResponse } from "./charts";
 
 const DEFAULT_LOT_QTY = 1;
 
@@ -184,23 +184,29 @@ export async function triggerRelogin(): Promise<{ expires_at: string }> {
   return postJson("/api/v1/auth/definedge/relogin");
 }
 
-/** Charts for a specific screener signal's actual legs — the underlying
- * future, each leg's own contract, and the combined net spread value. */
-export async function fetchSignalCharts(
+/** P&F / Renko / candlestick transforms for a screener signal's actual legs
+ * (POST /api/v1/charts/transforms). The Python backend computes the Renko
+ * bricks and P&F columns from the fixed 1-min base; `interval` only resamples
+ * the candlestick view. `boxPct`/`combinedBoxPct`/`reversal` are fetch-level
+ * parameters — changing them re-fetches rather than recomputing client-side. */
+export async function fetchChartTransforms(
   signal: Pick<ScreenerSignal, "symbol" | "expiry" | "legs">,
-  intervalMinutes: number = 1,
-): Promise<SignalChartsResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/charts/signal?interval=${intervalMinutes}`, {
+  opts: { interval?: number; boxPct?: number; combinedBoxPct?: number; reversal?: number } = {},
+): Promise<ChartTransformsResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/charts/transforms?interval=${opts.interval ?? 5}`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       symbol: signal.symbol,
       expiry: signal.expiry,
       legs: signal.legs.map((leg) => ({ strike: leg.strike, option_type: leg.option_type, action: leg.action })),
+      box_pct: opts.boxPct,
+      combined_box_pct: opts.combinedBoxPct,
+      reversal: opts.reversal,
     }),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`charts/signal -> ${res.status}`);
+  if (!res.ok) throw new Error(`charts/transforms -> ${res.status}`);
   return res.json();
 }
 
