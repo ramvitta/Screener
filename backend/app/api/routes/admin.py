@@ -54,7 +54,8 @@ async def create_job(payload: DownloadJobCreate):
     job_id = history_downloader.create_job_row(payload.symbol, payload.start_date, payload.end_date, payload.scope)
     history_downloader.start_job(job_id, payload.symbol, payload.start_date, payload.end_date, payload.scope)
     job = history_downloader.get_job(job_id)
-    assert job is not None
+    if job is None:
+        raise HTTPException(status_code=500, detail="Job was not persisted after creation")
     return job
 
 
@@ -85,7 +86,8 @@ def cancel_job(job_id: int):
         raise HTTPException(status_code=404, detail="Job not found")
     history_downloader.cancel_job(job_id)
     updated = history_downloader.get_job(job_id)
-    assert updated is not None
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Job was not persisted after cancel")
     return updated
 
 

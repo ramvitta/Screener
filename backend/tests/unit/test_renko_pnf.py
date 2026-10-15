@@ -4,6 +4,8 @@ tests/property/test_renko_pnf_props.py; this file pins structural behaviour and
 edge cases.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 
 import pytest

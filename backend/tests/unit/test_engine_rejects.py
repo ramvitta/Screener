@@ -16,7 +16,7 @@ def by_strategy(rejs, t):
 
 
 def _fingerprint(signals):
-    return [(s.strategy_type.value, tuple((l.strike, l.option_type.value, l.action.value) for l in s.legs), s.risk_reward.pop) for s in signals]
+    return [(s.strategy_type.value, tuple((leg.strike, leg.option_type.value, leg.action.value) for leg in s.legs), s.risk_reward.pop) for s in signals]
 
 
 def test_run_screener_wrapper_matches_full_result():

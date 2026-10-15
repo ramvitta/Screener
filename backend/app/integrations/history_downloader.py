@@ -21,7 +21,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from app.config import settings
 from app.db import clickhouse

@@ -10,6 +10,8 @@ is served from ClickHouse. Reuses the admin downloader's insert helpers.
 migration is needed (FEATURE_CHARTS_PLAN.md §5.4).
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timedelta
 from typing import List
