@@ -116,13 +116,14 @@ async def _series_for(client: DefinedgeClient, contract: ResolvedContract, label
 
 
 def _combine_candles(leg_candles: List[List[Candle]], actions: List[str]) -> List[Candle]:
-    """Net position value across legs as 1-min candles: BUY contributes
-    +price, SELL -price — i.e. what it would cost to close the spread. A
-    bar's high/low can't be read off simultaneously-observed leg extremes,
-    so each is the achievable bound: high = sum of each leg's most favorable
-    extreme toward a higher combined value, low = the least favorable bound.
-    Open/close are exact (each leg's real open/close, summed)."""
-    signs = [1 if a == "BUY" else -1 for a in actions]
+    """Net premium (credit/debit) across legs as 1-min candles: SELL
+    contributes +price (premium received), BUY -price (premium paid), so a
+    credit spread renders positive and a debit spread negative. A bar's
+    high/low can't be read off simultaneously-observed leg extremes, so each
+    is the achievable bound: high = sum of each leg's most favorable extreme
+    toward a higher net premium, low = the least favorable bound. Open/close
+    are exact (each leg's real open/close, summed)."""
+    signs = [1 if a == "SELL" else -1 for a in actions]
     ts_sets = [{c["ts"] for c in candles} for candles in leg_candles]
     common_ts = sorted(set.intersection(*ts_sets)) if ts_sets and all(ts_sets) else []
     candle_maps = [{c["ts"]: c for c in candles} for candles in leg_candles]
@@ -147,7 +148,7 @@ def _combine_candles(leg_candles: List[List[Candle]], actions: List[str]) -> Lis
 def _combine_series(leg_series: List[dict], actions: List[str], label: str) -> dict:
     """Combined-series dict for the /signal endpoint (label + ltp/change on
     top of the combined 1-min candles from `_combine_candles`)."""
-    signs = [1 if a == "BUY" else -1 for a in actions]
+    signs = [1 if a == "SELL" else -1 for a in actions]
     combined_candles = _combine_candles([s["candles"] for s in leg_series], actions)
 
     ltp = sum(sign * s["ltp"] for sign, s in zip(signs, leg_series, strict=True))

@@ -85,12 +85,16 @@ def test_transforms_shape_and_box_defaults(client, auth, transforms_broker):
     assert sell["box_pct"] == pytest.approx(1.0)
     assert buy["box_pct"] == pytest.approx(1.0)
 
-    # combined: net credit -100 → ref 100, box 0.5% = 0.5
+    # combined: net credit +100 (SELL 229 − BUY 129) → ref 100, box 0.5% = 0.5
     combined = series["combined"]
     assert combined is not None
     assert combined["reference_price"] == pytest.approx(100.0)
     assert combined["box_size"] == pytest.approx(0.5)
     assert combined["box_pct"] == pytest.approx(0.5)
+    # sign convention: SELL contributes +premium, BUY −premium, so a credit
+    # spread's net premium renders POSITIVE (previously negative as "cost to close").
+    assert all(c["close"] > 0 for c in combined["candles"])
+    assert combined["candles"][-1]["close"] == pytest.approx(100.0)
 
     # every series exposes the three views + box metadata
     for s in [future, sell, buy, combined]:
