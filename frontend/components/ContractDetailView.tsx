@@ -18,6 +18,7 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
   const [chartsError, setChartsError] = useState<string | null>(null);
   const [intervalMinutes, setIntervalMinutes] = useState<ChartInterval>(5);
   const [boxPct, setBoxPct] = useState<number>(DEFAULT_BOX_PCT);
+  const [combinedBoxPct, setCombinedBoxPct] = useState<number>(DEFAULT_COMBINED_BOX_PCT);
   const [reversal, setReversal] = useState<number>(DEFAULT_REVERSAL);
 
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
         const data = await fetchChartTransforms(signal!, {
           interval: intervalMinutes,
           boxPct,
-          combinedBoxPct: DEFAULT_COMBINED_BOX_PCT,
+          combinedBoxPct,
           reversal,
         });
         if (!cancelled) {
@@ -70,7 +71,7 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal?.signal_id, intervalMinutes, boxPct, reversal]);
+  }, [signal?.signal_id, intervalMinutes, boxPct, combinedBoxPct, reversal]);
 
   const expiryChips = useMemo(() => {
     const seen = new Set<string>();
@@ -240,7 +241,8 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
                   </button>
                 ))}
               </div>
-              <div className="flex gap-0.5 rounded-[7px] bg-[#171C23] p-[3px]">
+              <div className="flex items-center gap-1.5 rounded-[7px] bg-[#171C23] p-[3px]">
+                <span className="pl-1 text-[9px] uppercase tracking-wide text-[#8B96A5]" title="Box size for the future and each option leg">Box</span>
                 {BOX_PRESETS.map((p) => (
                   <button
                     key={p}
@@ -250,6 +252,23 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
                       background: boxPct === p ? "#232C36" : "transparent",
                       color: boxPct === p ? "#E8EAED" : "#8B96A5",
                       fontWeight: boxPct === p ? 600 : 400,
+                    }}
+                  >
+                    {p}%
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 rounded-[7px] bg-[#171C23] p-[3px]">
+                <span className="pl-1 text-[9px] uppercase tracking-wide text-[#8B96A5]" title="Box size for the combined spread premium">Combined</span>
+                {BOX_PRESETS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setCombinedBoxPct(p)}
+                    className="rounded-[5px] px-2 py-1 text-[10px]"
+                    style={{
+                      background: combinedBoxPct === p ? "#232C36" : "transparent",
+                      color: combinedBoxPct === p ? "#E8EAED" : "#8B96A5",
+                      fontWeight: combinedBoxPct === p ? 600 : 400,
                     }}
                   >
                     {p}%
