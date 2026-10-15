@@ -75,3 +75,41 @@ async def test_broker_down_degrades_instead_of_fabricating(monkeypatch, client, 
     await loop.run_screener_job()
     assert client.get("/api/v1/screener/signals", headers=auth).json() == []
     assert client.get("/api/v1/screener/status", headers=auth).json()["state"] == "degraded"
+
+
+def test_load_chain_from_clickhouse_unreachable(monkeypatch):
+    import app.db.clickhouse as ch
+
+    def boom():
+        raise ConnectionError("no clickhouse")
+
+    monkeypatch.setattr(ch, "get_client", boom)
+    assert loop._load_chain_from_clickhouse() is None
+
+
+def test_load_chain_from_clickhouse_empty(monkeypatch):
+    class _Result:
+        result_rows = []
+
+    class _Client:
+        def query(self, sql, parameters=None):
+            return _Result()
+
+    import app.db.clickhouse as ch
+
+    monkeypatch.setattr(ch, "get_client", lambda: _Client())
+    assert loop._load_chain_from_clickhouse() is None
+
+
+def test_load_chain_from_clickhouse_rows_still_stubbed(monkeypatch):
+    class _Result:
+        result_rows = [(1, 2, 3)]
+
+    class _Client:
+        def query(self, sql, parameters=None):
+            return _Result()
+
+    import app.db.clickhouse as ch
+
+    monkeypatch.setattr(ch, "get_client", lambda: _Client())
+    assert loop._load_chain_from_clickhouse() is None
