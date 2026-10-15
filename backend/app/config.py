@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     sessions_retention_hours: int = 24
     logs_retention_days: int = 14
 
+    # --- Signal history (workstream 1) ---
+    # Retention is NOT auto-enforced: pruning is a manual, admin-confirmed
+    # action (POST /api/v1/admin/history/prune-signals) that deletes rows
+    # older than this many days.
+    signal_history_retention_days: int = 365
+
     # --- Admin historical-data-download (proactive archival) ---
     history_rps: float = 3.0  # max historical-candle requests/sec to Definedge
     history_max_retries: int = 3

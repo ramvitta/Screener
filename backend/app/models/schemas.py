@@ -401,3 +401,52 @@ class DownloadCoverageRow(BaseModel):
     count: int
     min_ts: Optional[datetime] = None
     max_ts: Optional[datetime] = None
+
+
+# --- Signal history (screener signal + reject tracking) ---
+
+
+class ScreenerRun(BaseModel):
+    run_id: str
+    started_at: datetime
+    data_source: Optional[DataSource] = None
+    status: str  # ok | sample | degraded
+    message: str = ""
+    signal_count: int
+    created_at: datetime
+
+
+class SignalHistoryItem(BaseModel):
+    id: int
+    run_id: str
+    signal_id: Optional[str] = None
+    strategy_type: Optional[StrategyType] = None
+    symbol: Optional[str] = None
+    expiry: Optional[date] = None
+    status: str  # accepted | rejected
+    reject_reason: Optional[str] = None
+    generated_at: Optional[datetime] = None
+    data_source: Optional[str] = None
+    reason: Optional[str] = None
+    reason_source: Optional[str] = None
+    created_at: datetime
+
+
+class SignalHistoryDetail(SignalHistoryItem):
+    signal_json: Optional[dict] = None
+    decision_json: Optional[dict] = None
+
+
+class ScreenerRunDetail(ScreenerRun):
+    signals: List[SignalHistoryDetail] = Field(default_factory=list)
+
+
+class PruneSignalsRequest(StrictModel):
+    confirm: bool
+    before: Optional[date] = None  # default: retention window boundary
+
+
+class PruneSignalsResponse(BaseModel):
+    deleted_signals: int
+    deleted_runs: int
+    cutoff: date

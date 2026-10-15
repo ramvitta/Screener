@@ -5,11 +5,14 @@ dependency as every other router (main.py's `_protected` list) — the
 original plan's "no auth on admin" note predates the security hardening
 pass and no longer applies."""
 
+from datetime import date, datetime, time, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, HTTPException
 
 from app.api.routes.auth import _client, ensure_authenticated
+from app.config import settings
+from app.db.sqlite import get_conn
 from app.integrations import history_downloader, instruments
 from app.integrations.definedge_client import DefinedgeAuthError
 from app.models.schemas import (
@@ -20,6 +23,8 @@ from app.models.schemas import (
     DownloadValidateRequest,
     DownloadValidateResponse,
     FnoStock,
+    PruneSignalsRequest,
+    PruneSignalsResponse,
     Symbol,
 )
 
@@ -87,3 +92,21 @@ def cancel_job(job_id: int):
 @router.get("/coverage", response_model=List[DownloadCoverageRow])
 def coverage(symbol: Symbol):
     return history_downloader.coverage(symbol)
+
+
+@router.post("/prune-signals", response_model=PruneSignalsResponse)
+def prune_signals(payload: PruneSignalsRequest):
+    """Admin-gated retention prune: deletes signal history older than the
+    retention window (or an explicit `before` date) only when the caller
+    confirms. There is deliberately no automatic pruning."""
+    if not payload.confirm:
+        raise HTTPException(status_code=400, detail="Set confirm=true to prune signal history")
+    cutoff_date = payload.before or (date.today() - timedelta(days=settings.signal_history_retention_days))
+    cutoff = datetime.combine(cutoff_date, time.min, tzinfo=timezone.utc).isoformat()
+    with get_conn() as conn:
+        old_run_ids = [r["run_id"] for r in conn.execute("SELECT run_id FROM screener_runs WHERE started_at < ?", (cutoff,)).fetchall()]
+        deleted_signals = 0
+        for rid in old_run_ids:
+            deleted_signals += conn.execute("DELETE FROM screener_signals WHERE run_id = ?", (rid,)).rowcount
+        deleted_runs = conn.execute("DELETE FROM screener_runs WHERE started_at < ?", (cutoff,)).rowcount
+    return PruneSignalsResponse(deleted_signals=deleted_signals, deleted_runs=deleted_runs, cutoff=cutoff_date)

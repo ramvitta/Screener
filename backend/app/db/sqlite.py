@@ -54,6 +54,43 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- One row per run_screener_job() invocation, including empty/degraded runs,
+-- so the history page can show "nothing found this run".
+CREATE TABLE IF NOT EXISTS screener_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id          TEXT NOT NULL UNIQUE,
+    started_at      TEXT NOT NULL,
+    data_source     TEXT,
+    status          TEXT NOT NULL CHECK (status IN ('ok','sample','degraded')),
+    message         TEXT,
+    signal_count    INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One row per screener signal (accepted) or rejected candidate. decision_json
+-- holds the full decision inputs (active params + computed values) so the
+-- history page can reconstruct *why* a signal was emitted or rejected.
+CREATE TABLE IF NOT EXISTS screener_signals (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id          TEXT NOT NULL REFERENCES screener_runs(run_id),
+    signal_id       TEXT,
+    strategy_type   TEXT NOT NULL,
+    symbol          TEXT NOT NULL,
+    expiry          TEXT,
+    status          TEXT NOT NULL CHECK (status IN ('accepted','rejected')),
+    reject_reason   TEXT,
+    generated_at    TEXT NOT NULL,
+    data_source     TEXT,
+    reason          TEXT,
+    reason_source   TEXT,
+    signal_json     TEXT,
+    decision_json   TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_screener_signals_run ON screener_signals(run_id);
+CREATE INDEX IF NOT EXISTS idx_screener_signals_created ON screener_signals(created_at);
+
 CREATE TABLE IF NOT EXISTS position_logs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     strategy_type   TEXT NOT NULL,
@@ -176,7 +213,7 @@ WHEN NEW.qty <= 0 OR NEW.entry_price < 0 OR NEW.strike <= 0
 BEGIN SELECT RAISE(ABORT, 'invalid leg qty/price/strike'); END;
 """
 
-SCHEMA_VERSION = 3  # +download_jobs/download_job_items (admin historical-data-download)
+SCHEMA_VERSION = 4  # +screener_runs/screener_signals (signal history & rejection audit)
 
 
 def get_db_path() -> str:

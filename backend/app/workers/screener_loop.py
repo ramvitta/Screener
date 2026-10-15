@@ -13,6 +13,7 @@ screener never presents fabricated market data as a recommendation.
 import json
 import logging
 import math
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -22,7 +23,7 @@ from app.db.sqlite import get_conn
 from app.integrations.definedge_client import DefinedgeAuthError
 from app.models.schemas import DataSource
 from app.reasoning.generator import enrich_reasons
-from app.screener.engine import ChainRow, OptionChainSnapshot, ScreenerParams, run_screener
+from app.screener.engine import ChainRow, OptionChainSnapshot, ScreenerParams, build_decision, run_screener_with_rejects
 from app.screener.pricing import MIN_T_YEARS, time_to_expiry_years
 
 logger = logging.getLogger(__name__)
@@ -198,8 +199,59 @@ async def _live_snapshot_from_definedge(symbol: str = "NIFTY") -> Optional[Optio
         return None
 
 
+def _insert_run(conn, run_id: str, started_at: datetime, data_source: Optional[str], status: str, message: str, signal_count: int) -> None:
+    conn.execute(
+        "INSERT INTO screener_runs (run_id, started_at, data_source, status, message, signal_count) VALUES (?, ?, ?, ?, ?, ?)",
+        (run_id, started_at.isoformat(), data_source, status, message, signal_count),
+    )
+
+
+def _insert_signal(conn, run_id: str, status: str, *, strategy_type: str, symbol: str, expiry: str, generated_at: str, data_source: str, decision_json: str, signal_id: Optional[str] = None, reject_reason: Optional[str] = None, reason: Optional[str] = None, reason_source: Optional[str] = None, signal_json: Optional[str] = None) -> None:
+    conn.execute(
+        """
+        INSERT INTO screener_signals
+        (run_id, signal_id, strategy_type, symbol, expiry, status, reject_reason, generated_at, data_source, reason, reason_source, signal_json, decision_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (run_id, signal_id, strategy_type, symbol, expiry, status, reject_reason, generated_at, data_source, reason, reason_source, signal_json, decision_json),
+    )
+
+
+def _persist_history(conn, run_id: str, snapshot: OptionChainSnapshot, params: ScreenerParams, accepted: List, rejected: List, started_at: datetime, status: str, message: str) -> None:
+    data_source = snapshot.data_source.value
+    _insert_run(conn, run_id, started_at, data_source, status, message, len(accepted))
+    for signal in accepted:
+        _insert_signal(
+            conn, run_id, "accepted",
+            strategy_type=signal.strategy_type.value,
+            symbol=signal.symbol,
+            expiry=signal.expiry.isoformat(),
+            generated_at=signal.generated_at.isoformat(),
+            data_source=data_source,
+            decision_json=json.dumps(build_decision(signal, snapshot, params)),
+            signal_id=signal.signal_id,
+            reason=signal.reason,
+            reason_source=signal.reason_source,
+            signal_json=json.dumps(signal.model_dump(mode="json")),
+        )
+    for rej in rejected:
+        _insert_signal(
+            conn, run_id, "rejected",
+            strategy_type=rej.strategy_type.value,
+            symbol=rej.symbol,
+            expiry=rej.expiry.isoformat(),
+            generated_at=rej.generated_at.isoformat(),
+            data_source=rej.data_source.value,
+            decision_json=json.dumps(rej.decision),
+            reject_reason=rej.reject_reason,
+        )
+
+
 async def run_screener_job() -> None:
     global _latest_signals, _last_success_at
+    run_id = str(uuid.uuid4())
+    started_at = datetime.now(timezone.utc)
+
     snapshot = _load_chain_from_clickhouse()
     if snapshot is not None:
         snapshot.data_source = DataSource.clickhouse
@@ -209,6 +261,8 @@ async def run_screener_job() -> None:
         if not settings.allow_sample_data:
             _latest_signals = []
             _set_status("degraded", None, "No live market data available — screener paused (sample data is disabled)")
+            with get_conn() as conn:
+                _insert_run(conn, run_id, started_at, None, "degraded", "No live market data available — screener paused (sample data is disabled)", 0)
             logger.warning("Screener run skipped: no real market data and ALLOW_SAMPLE_DATA is off")
             return
         snapshot = _sample_snapshot()
@@ -216,16 +270,19 @@ async def run_screener_job() -> None:
     # The sample fixture's illustrative IV band can't meet the production
     # IV-rank threshold, so dev runs relax it. Real data uses full defaults.
     params = ScreenerParams(min_iv_rank=0.0) if snapshot.data_source == DataSource.sample else None
-    signals = run_screener(snapshot, params)
-    signals = await enrich_reasons(signals, snapshot)  # no-op unless LLM_REASON_ENABLED
+    result = run_screener_with_rejects(snapshot, params)
+    signals = await enrich_reasons(result.accepted, snapshot)  # no-op unless LLM_REASON_ENABLED
     _latest_signals = [s.model_dump(mode="json") for s in signals]
     _last_success_at = datetime.now(timezone.utc)
     if snapshot.data_source == DataSource.sample:
         _set_status("sample", "sample", "Showing SAMPLE data — not real market prices")
+        status, message = "sample", "Showing SAMPLE data — not real market prices"
     else:
         _set_status("ok", snapshot.data_source.value, f"{len(signals)} signals from {snapshot.data_source.value} data")
+        status, message = "ok", f"{len(signals)} signals from {snapshot.data_source.value} data"
 
     with get_conn() as conn:
+        _persist_history(conn, run_id, snapshot, result.params, signals, result.rejected, started_at, status, message)
         for signal in signals:
             conn.execute(
                 """
@@ -239,4 +296,4 @@ async def run_screener_job() -> None:
                 ),
             )
 
-    logger.info("Screener run produced %d signals", len(signals))
+    logger.info("Screener run produced %d signals (%d rejected)", len(signals), len(result.rejected))
