@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import SignalChartPanel from "./SignalChartPanel";
-import SignalPayoffPanel from "./SignalPayoffPanel";
 import { fetchScreenerSignals, fetchChartTransforms } from "@/lib/api";
 import { daysToExpiry, formatCurrency, formatDate, formatPct, formatRatio, formatStrategyLabel, riskAdjustedReturn } from "@/lib/format";
 import type { ScreenerSignal } from "@/lib/types";
@@ -316,11 +315,6 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
               </div>
             )
           )}
-
-          {/* PAYOFF */}
-          <div className="mt-3.5 h-[340px] flex-shrink-0">
-            <SignalPayoffPanel signal={signal} />
-          </div>
 
           {/* LEGS TABLE */}
           <div className="mt-3.5 flex-shrink-0 rounded-[10px] border p-3" style={{ background: "#12161C", borderColor: "#1F2630" }}>
