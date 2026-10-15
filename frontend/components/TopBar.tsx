@@ -91,6 +91,9 @@ export default function TopBar({
           </span>
         )}
       </div>
+      <Link href="/history" className="text-xs text-[#8B96A5]" title="Signal history: accepted + rejected signals">
+        History
+      </Link>
       <Link href="/admin" className="text-xs text-[#8B96A5]" title="Admin: historical-data archive">
         Admin
       </Link>

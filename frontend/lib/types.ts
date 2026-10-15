@@ -296,3 +296,66 @@ export interface DownloadCoverageRow {
   min_ts: string | null;
   max_ts: string | null;
 }
+
+// --- Signal history (screener signal + reject tracking) ---
+
+export interface ScreenerRun {
+  run_id: string;
+  started_at: string;
+  data_source: "live" | "clickhouse" | "sample" | null;
+  status: "ok" | "sample" | "degraded";
+  message: string;
+  signal_count: number;
+  created_at: string;
+}
+
+export interface SignalHistoryItem {
+  id: number;
+  run_id: string;
+  signal_id: string | null;
+  strategy_type: StrategyType | null;
+  symbol: string | null;
+  expiry: string | null;
+  status: "accepted" | "rejected";
+  reject_reason: string | null;
+  generated_at: string | null;
+  data_source: string | null;
+  reason: string | null;
+  reason_source: string | null;
+  created_at: string;
+}
+
+export interface SignalDecisionComputed {
+  iv_rank: number | null;
+  rsi: number | null;
+  support: number | null;
+  resistance: number | null;
+  short_strike: number | null;
+  short_delta: number | null;
+  short_iv: number | null;
+  pop: number | null;
+  credit: number | null;
+  max_loss: number | null;
+  breakeven: number | null;
+  breakeven_lower: number | null;
+  net_delta: number | null;
+  net_theta: number | null;
+  net_vega: number | null;
+  net_gamma: number | null;
+  detail?: string | null;
+}
+
+export interface SignalDecision {
+  params: Record<string, number>;
+  computed: SignalDecisionComputed;
+  reject_reason: string | null;
+}
+
+export interface SignalHistoryDetail extends SignalHistoryItem {
+  signal_json: ScreenerSignal | null;
+  decision_json: SignalDecision | null;
+}
+
+export interface ScreenerRunDetail extends ScreenerRun {
+  signals: SignalHistoryDetail[];
+}

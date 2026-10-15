@@ -16,8 +16,12 @@ import type {
   PayoffResponse,
   Position,
   PositionLeg,
+  ScreenerRun,
+  ScreenerRunDetail,
   ScreenerSignal,
   ScreenerStatus,
+  SignalHistoryDetail,
+  SignalHistoryItem,
   StrategyType,
 } from "./types";
 import type { SignalChartsResponse } from "./charts";
@@ -143,6 +147,32 @@ export async function fetchBrokerSession(): Promise<BrokerSessionInfo | null> {
  * fixture — NOT real prices) or "degraded" (no real data, no signals). */
 export async function fetchScreenerStatus(): Promise<ScreenerStatus> {
   return getJson<ScreenerStatus>("/api/v1/screener/status");
+}
+
+/** Signal-history read endpoints — one row per run (incl. empty/degraded
+ * runs) and one row per accepted signal or rejected candidate. */
+export async function fetchScreenerRuns(limit = 50, offset = 0): Promise<ScreenerRun[]> {
+  return getJson<ScreenerRun[]>(`/api/v1/screener/runs?limit=${limit}&offset=${offset}`);
+}
+
+export async function fetchScreenerRun(runId: string): Promise<ScreenerRunDetail> {
+  return getJson<ScreenerRunDetail>(`/api/v1/screener/runs/${runId}`);
+}
+
+export async function fetchSignalHistory(
+  limit = 100,
+  offset = 0,
+  filters?: { status?: string; strategy_type?: string; symbol?: string },
+): Promise<SignalHistoryItem[]> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.strategy_type) params.set("strategy_type", filters.strategy_type);
+  if (filters?.symbol) params.set("symbol", filters.symbol);
+  return getJson<SignalHistoryItem[]>(`/api/v1/screener/history?${params.toString()}`);
+}
+
+export async function fetchSignalHistoryDetail(id: number): Promise<SignalHistoryDetail> {
+  return getJson<SignalHistoryDetail>(`/api/v1/screener/history/${id}`);
 }
 
 /** Forces a fresh Definedge session via TOTP auto-login (POST
