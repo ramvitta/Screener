@@ -2,7 +2,12 @@
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
-filterwarnings = ["ignore::urllib3.exceptions.NotOpenSSLWarning"]
+filterwarnings = [
+    "ignore::urllib3.exceptions.NotOpenSSLWarning",
+    # starlette>=1.0 testclient prefers httpx2 over httpx; our tests mock the
+    # HTTP layer with respx (httpx-only), so we keep httpx and silence the notice.
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
+]
 addopts = "-q"
 
 [tool.coverage.run]
@@ -11,7 +16,7 @@ omit = ["app/db/clickhouse.py", "app/api/routes/backfill.py", "app/api/routes/ch
 
 [tool.ruff]
 line-length = 140
-target-version = "py39"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "S"]

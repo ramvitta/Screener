@@ -14,12 +14,21 @@ def _concrete(path: str) -> str:
 
 
 def _routes():
+    from fastapi.routing import _IncludedRouter
+
     from app.main import app
 
-    for r in app.routes:
-        if isinstance(r, Route) and r.path not in OPEN_PATHS:
-            for m in sorted(r.methods - {"HEAD", "OPTIONS"}):
-                yield m, _concrete(r.path)
+    def walk(routes):
+        for r in routes:
+            if isinstance(r, _IncludedRouter):
+                # FastAPI >=0.143 wraps each include_router() call in a lazy
+                # _IncludedRouter; concrete routes live on its original_router.
+                yield from walk(r.original_router.routes)
+            elif isinstance(r, Route) and r.path not in OPEN_PATHS:
+                for m in sorted(r.methods - {"HEAD", "OPTIONS"}):
+                    yield m, _concrete(r.path)
+
+    yield from walk(app.routes)
 
 
 def test_every_route_rejects_missing_token(client):

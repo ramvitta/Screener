@@ -140,6 +140,6 @@ async def enrich_reasons(signals: List[ScreenerSignal], snapshot: OptionChainSna
     results = await asyncio.gather(*(llm_reason(s, snapshot) for s in head))
     enriched = [
         s.model_copy(update={"reason": text, "reason_source": "llm"}) if text else s
-        for s, text in zip(head, results)
+        for s, text in zip(head, results, strict=True)
     ]
     return enriched + tail

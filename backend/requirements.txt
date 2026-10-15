@@ -1,6 +1,7 @@
 # Pinned for reproducible, auditable installs. Update deliberately and run
 # `pip-audit -r requirements.txt` + the full test/eval suite afterwards.
-fastapi==0.128.8
+fastapi==0.143.2
+starlette==1.8.0  # pinned: fastapi's range is starlette>=0.46 (unbounded), but the security fixes need 1.x
 uvicorn[standard]==0.39.0
 pydantic==2.13.5
 pydantic-settings==2.11.0
@@ -8,12 +9,9 @@ httpx==0.28.1
 websockets==15.0.1  # required by uvicorn for the /ws endpoints
 clickhouse-connect==0.15.1
 APScheduler==3.11.3
-python-dotenv==1.2.1
+python-dotenv==1.2.4
 pyotp==2.10.0
 scipy==1.13.1
 numpy==2.0.2
 cryptography==50.0.2
 typing_extensions==4.16.0
-# Optional "Reason for Trade" LLM feature (LLM_REASON_ENABLED, off by default).
-# Imported unconditionally by app/reasoning/generator.py, so it must be present
-# even though the feature itself is gated at runtime.

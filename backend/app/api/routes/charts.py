@@ -133,10 +133,10 @@ def _combine_candles(leg_candles: List[List[Candle]], actions: List[str]) -> Lis
         combined.append(
             Candle(
                 ts=ts,
-                open=sum(sign * r["open"] for sign, r in zip(signs, rows)),
-                high=sum((r["high"] if sign > 0 else -r["low"]) for sign, r in zip(signs, rows)),
-                low=sum((r["low"] if sign > 0 else -r["high"]) for sign, r in zip(signs, rows)),
-                close=sum(sign * r["close"] for sign, r in zip(signs, rows)),
+                open=sum(sign * r["open"] for sign, r in zip(signs, rows, strict=True)),
+                high=sum((r["high"] if sign > 0 else -r["low"]) for sign, r in zip(signs, rows, strict=True)),
+                low=sum((r["low"] if sign > 0 else -r["high"]) for sign, r in zip(signs, rows, strict=True)),
+                close=sum(sign * r["close"] for sign, r in zip(signs, rows, strict=True)),
                 volume=sum(r["volume"] for r in rows),
                 oi=None,
             )
@@ -150,9 +150,9 @@ def _combine_series(leg_series: List[dict], actions: List[str], label: str) -> d
     signs = [1 if a == "BUY" else -1 for a in actions]
     combined_candles = _combine_candles([s["candles"] for s in leg_series], actions)
 
-    ltp = sum(sign * s["ltp"] for sign, s in zip(signs, leg_series))
+    ltp = sum(sign * s["ltp"] for sign, s in zip(signs, leg_series, strict=True))
     have_prev_close = all(s["prev_close"] is not None for s in leg_series)
-    prev_close = sum(sign * s["prev_close"] for sign, s in zip(signs, leg_series)) if have_prev_close else None
+    prev_close = sum(sign * s["prev_close"] for sign, s in zip(signs, leg_series, strict=True)) if have_prev_close else None
     change = ltp - prev_close if prev_close is not None else None
     change_pct = (change / abs(prev_close) * 100) if change is not None and prev_close else None
 
@@ -212,7 +212,7 @@ async def signal_charts(payload: SignalChartsRequest, interval: int = Query(1, d
         await _series_for(
             _client, contract, f"{leg.action} {payload.symbol} {int(leg.strike)} {leg.option_type}", interval
         )
-        for contract, leg in zip(leg_contracts, payload.legs)
+        for contract, leg in zip(leg_contracts, payload.legs, strict=True)
     ]
 
     combined = None
@@ -386,7 +386,7 @@ async def chart_transforms(
             _client, exchange=c.exchange, token=c.token, symbol=payload.symbol,
             kind="option", expiry=c.expiry, strike=leg.strike, option_type=leg.option_type,
         )
-        for c, leg in zip(leg_contracts, payload.legs)
+        for c, leg in zip(leg_contracts, payload.legs, strict=True)
     ]
 
     future_series = _build_series(
@@ -399,7 +399,7 @@ async def chart_transforms(
             c.trading_symbol, c.strike, c.expiry,
             candles, payload.box_pct, payload.reversal, interval,
         )
-        for c, leg, candles in zip(leg_contracts, payload.legs, leg_candles)
+        for c, leg, candles in zip(leg_contracts, payload.legs, leg_candles, strict=True)
     ]
 
     combined = None

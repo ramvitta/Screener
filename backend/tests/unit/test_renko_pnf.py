@@ -80,7 +80,7 @@ def test_renko_up_bricks_tile_without_double_count():
     for br in bricks:
         assert br["close"] > br["open"]
         assert br["high"] - br["low"] == pytest.approx(_box_at(br["low"]))
-    for a, b in zip(bricks, bricks[1:]):
+    for a, b in zip(bricks, bricks[1:], strict=False):
         assert a["high"] == pytest.approx(b["low"])
 
 

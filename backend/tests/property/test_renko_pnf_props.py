@@ -90,7 +90,7 @@ def test_renko_monotonic_up_does_not_double_count(closes):
     for br in bricks:
         assert br["close"] > br["open"]
         assert math.isclose(br["high"] - br["low"], _box_at(br["low"], 1.0), abs_tol=1e-6)
-    for a, b in zip(bricks, bricks[1:]):
+    for a, b in zip(bricks, bricks[1:], strict=False):
         assert a["high"] == b["low"]
 
 
@@ -138,7 +138,7 @@ def test_pnf_column_geometry_is_consistent(closes):
 def test_pnf_columns_alternate_direction(closes):
     columns = build_point_and_figure(_candles(closes), 0.5, 3)
     dirs = [1 if col["close"] >= col["open"] else -1 for col in columns]
-    for a, b in zip(dirs, dirs[1:]):
+    for a, b in zip(dirs, dirs[1:], strict=False):
         assert a != b  # X/O alternation
 
 
