@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.api.routes.auth import _client, ensure_authenticated
+from app.charts.transforms import box_size_from_pct, build_point_and_figure, build_renko
+from app.integrations import chart_history
 from app.integrations.definedge_client import Candle, DefinedgeAuthError, DefinedgeClient
 from app.integrations.instruments import (
     ContractNotFound,
@@ -107,23 +109,22 @@ async def _series_for(client: DefinedgeClient, contract: ResolvedContract, label
     }
 
 
-def _combine_series(leg_series: List[dict], actions: List[str], label: str) -> dict:
-    """Net position value across legs: BUY contributes +price, SELL -price —
-    i.e. what it would cost to close the whole spread right now. A bar's
-    high/low can't be read off simultaneously-observed leg extremes, so each
-    is the achievable bound: high = sum of each leg's most favorable extreme
-    toward a higher combined value, low = the least favorable bound. Open/
-    close are exact (each leg's real open/close, summed)."""
+def _combine_candles(leg_candles: List[List[Candle]], actions: List[str]) -> List[Candle]:
+    """Net position value across legs as 1-min candles: BUY contributes
+    +price, SELL -price — i.e. what it would cost to close the spread. A
+    bar's high/low can't be read off simultaneously-observed leg extremes,
+    so each is the achievable bound: high = sum of each leg's most favorable
+    extreme toward a higher combined value, low = the least favorable bound.
+    Open/close are exact (each leg's real open/close, summed)."""
     signs = [1 if a == "BUY" else -1 for a in actions]
-
-    ts_sets = [{c["ts"] for c in s["candles"]} for s in leg_series]
+    ts_sets = [{c["ts"] for c in candles} for candles in leg_candles]
     common_ts = sorted(set.intersection(*ts_sets)) if ts_sets and all(ts_sets) else []
+    candle_maps = [{c["ts"]: c for c in candles} for candles in leg_candles]
 
-    candle_maps = [{c["ts"]: c for c in s["candles"]} for s in leg_series]
-    combined_candles: List[Candle] = []
+    combined: List[Candle] = []
     for ts in common_ts:
         rows = [cm[ts] for cm in candle_maps]
-        combined_candles.append(
+        combined.append(
             Candle(
                 ts=ts,
                 open=sum(sign * r["open"] for sign, r in zip(signs, rows)),
@@ -134,6 +135,14 @@ def _combine_series(leg_series: List[dict], actions: List[str], label: str) -> d
                 oi=None,
             )
         )
+    return combined
+
+
+def _combine_series(leg_series: List[dict], actions: List[str], label: str) -> dict:
+    """Combined-series dict for the /signal endpoint (label + ltp/change on
+    top of the combined 1-min candles from `_combine_candles`)."""
+    signs = [1 if a == "BUY" else -1 for a in actions]
+    combined_candles = _combine_candles([s["candles"] for s in leg_series], actions)
 
     ltp = sum(sign * s["ltp"] for sign, s in zip(signs, leg_series))
     have_prev_close = all(s["prev_close"] is not None for s in leg_series)
@@ -254,5 +263,134 @@ async def nifty_atm_charts(interval: int = Query(1, description="Candle size in 
             "spot": spot_series,
             "ce": ce_series,
             "pe": pe_series,
+        },
+    }
+
+
+class TransformsRequest(BaseModel):
+    symbol: str
+    expiry: date
+    legs: List[SignalLeg]
+    box_pct: float = 0.1
+    combined_box_pct: float = 0.5
+    reversal: int = 3
+
+
+def _transform_candles(candles: List[Candle], box_pct: float, reversal: int, interval: int) -> dict:
+    """Reference price, box size, and the three views (resampled candlesticks
+    + Renko + P&F) for one series. Renko/P&F always use the 1-min base
+    (independent of the candlestick interval) per FEATURE_CHARTS_PLAN.md §8."""
+    if not candles:
+        return {"reference_price": None, "box_size": None, "candles": [], "renko": [], "pnf": []}
+    reference = abs(candles[-1]["close"])
+    box = box_size_from_pct(reference, box_pct)
+    return {
+        "reference_price": reference,
+        "box_size": box,
+        "candles": _resample(candles, interval),
+        "renko": build_renko(candles, box, reversal),
+        "pnf": build_point_and_figure(candles, box, reversal),
+    }
+
+
+def _build_series(
+    label: str,
+    trading_symbol: str,
+    strike,
+    expiry,
+    candles: List[Candle],
+    box_pct: float,
+    reversal: int,
+    interval: int,
+) -> dict:
+    t = _transform_candles(candles, box_pct, reversal, interval)
+    return {
+        "label": label,
+        "trading_symbol": trading_symbol,
+        "strike": strike,
+        "expiry": expiry.isoformat() if expiry else None,
+        "reference_price": t["reference_price"],
+        "box_size": t["box_size"],
+        "candles": t["candles"],
+        "renko": t["renko"],
+        "pnf": t["pnf"],
+    }
+
+
+@router.post("/transforms")
+async def chart_transforms(
+    payload: TransformsRequest,
+    interval: int = Query(5, description="Candlestick size in minutes (Renko/P&F stay 1-min)"),
+):
+    """P&F / Renko / candlestick transforms for a signal's actual contracts.
+
+    For each series (future, legs, combined) returns raw candles resampled to
+    `interval`, plus `renko` and `pnf` built from the fixed 1-min base (§8).
+    Box size defaults to `box_pct`% of each series' own reference price
+    (combined uses `combined_box_pct`); `reversal` is the P&F/Renko reversal.
+    """
+    if interval not in VALID_INTERVALS:
+        raise HTTPException(status_code=400, detail=f"interval must be one of {sorted(VALID_INTERVALS)}")
+    if not payload.legs:
+        raise HTTPException(status_code=400, detail="At least one leg is required")
+    if payload.box_pct <= 0 or payload.combined_box_pct <= 0:
+        raise HTTPException(status_code=400, detail="box_pct and combined_box_pct must be positive")
+    if payload.reversal < 1:
+        raise HTTPException(status_code=400, detail="reversal must be >= 1")
+
+    try:
+        await ensure_authenticated()
+        rows = await get_master_rows(_client)
+        future = find_future(rows, payload.symbol, date.today())
+        leg_contracts = [
+            find_option(rows, payload.symbol, payload.expiry, leg.strike, leg.option_type) for leg in payload.legs
+        ]
+    except DefinedgeAuthError:
+        raise HTTPException(status_code=401, detail="Not authenticated with Definedge") from None
+    except ContractNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+
+    future_candles = await chart_history.ensure_chart_history(
+        _client, exchange=future.exchange, token=future.token, symbol=payload.symbol,
+        kind="future", expiry=future.expiry,
+    )
+    leg_candles = [
+        await chart_history.ensure_chart_history(
+            _client, exchange=c.exchange, token=c.token, symbol=payload.symbol,
+            kind="option", expiry=c.expiry, strike=leg.strike, option_type=leg.option_type,
+        )
+        for c, leg in zip(leg_contracts, payload.legs)
+    ]
+
+    future_series = _build_series(
+        f"{payload.symbol}-I", future.trading_symbol, future.strike, future.expiry,
+        future_candles, payload.box_pct, payload.reversal, interval,
+    )
+    leg_series = [
+        _build_series(
+            f"{leg.action} {payload.symbol} {int(leg.strike)} {leg.option_type}",
+            c.trading_symbol, c.strike, c.expiry,
+            candles, payload.box_pct, payload.reversal, interval,
+        )
+        for c, leg, candles in zip(leg_contracts, payload.legs, leg_candles)
+    ]
+
+    combined = None
+    if len(leg_series) >= 2:
+        label = " + ".join(f"{leg.action} {int(leg.strike)}{leg.option_type}" for leg in payload.legs)
+        combined_candles = _combine_candles(leg_candles, [leg.action for leg in payload.legs])
+        combined = _build_series(
+            label, label, None, leg_contracts[0].expiry,
+            combined_candles, payload.combined_box_pct, payload.reversal, interval,
+        )
+
+    return {
+        "as_of": datetime.now(IST).isoformat(),
+        "interval_minutes": interval,
+        "reversal": payload.reversal,
+        "series": {
+            "future": future_series,
+            "legs": leg_series,
+            "combined": combined,
         },
     }
