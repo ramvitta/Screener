@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import SignalChartPanel from "./SignalChartPanel";
+import CombinedStrategyChart from "./charts/CombinedStrategyChart";
 import { fetchScreenerSignals, fetchChartTransforms } from "@/lib/api";
 import { daysToExpiry, formatCurrency, formatDate, formatPct, formatRatio, formatStrategyLabel, riskAdjustedReturn } from "@/lib/format";
 import type { ScreenerSignal } from "@/lib/types";
-import { BOX_PRESETS, CHART_INTERVALS, DEFAULT_FUTURE_BOX_PCT, DEFAULT_OPTION_BOX_PCT, DEFAULT_COMBINED_BOX_PCT, DEFAULT_REVERSAL, type ChartInterval, type ChartTransformsResponse } from "@/lib/charts";
+import { BOX_PRESETS, CHART_INTERVALS, DEFAULT_FUTURE_BOX_PCT, DEFAULT_OPTION_BOX_PCT, DEFAULT_REVERSAL, type ChartInterval, type ChartTransformsResponse } from "@/lib/charts";
 
 const STRATEGY_LABELS: ScreenerSignal["strategy_type"][] = ["bull_put_spread", "bear_call_spread", "iron_condor"];
 
@@ -18,7 +19,6 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
   const [intervalMinutes, setIntervalMinutes] = useState<ChartInterval>(5);
   const [futureBoxPct, setFutureBoxPct] = useState<number>(DEFAULT_FUTURE_BOX_PCT);
   const [optionBoxPct, setOptionBoxPct] = useState<number>(DEFAULT_OPTION_BOX_PCT);
-  const [combinedBoxPct, setCombinedBoxPct] = useState<number>(DEFAULT_COMBINED_BOX_PCT);
   const [reversal, setReversal] = useState<number>(DEFAULT_REVERSAL);
 
   useEffect(() => {
@@ -51,7 +51,6 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
           interval: intervalMinutes,
           futureBoxPct,
           optionBoxPct,
-          combinedBoxPct,
           reversal,
         });
         if (!cancelled) {
@@ -72,7 +71,7 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal?.signal_id, intervalMinutes, futureBoxPct, optionBoxPct, combinedBoxPct, reversal]);
+  }, [signal?.signal_id, intervalMinutes, futureBoxPct, optionBoxPct, reversal]);
 
   const expiryChips = useMemo(() => {
     const seen = new Set<string>();
@@ -276,23 +275,6 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-1.5 rounded-[7px] bg-[#171C23] p-[3px]">
-                <span className="pl-1 text-[9px] uppercase tracking-wide text-[#8B96A5]" title="Box size for the combined spread premium">Combined</span>
-                {BOX_PRESETS.map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setCombinedBoxPct(p)}
-                    className="rounded-[5px] px-2 py-1 text-[10px]"
-                    style={{
-                      background: combinedBoxPct === p ? "#232C36" : "transparent",
-                      color: combinedBoxPct === p ? "#E8EAED" : "#8B96A5",
-                      fontWeight: combinedBoxPct === p ? 600 : 400,
-                    }}
-                  >
-                    {p}%
-                  </button>
-                ))}
-              </div>
               <div className="flex gap-0.5 rounded-[7px] bg-[#171C23] p-[3px]">
                 {[2, 3, 4].map((r) => (
                   <button
@@ -325,7 +307,13 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
               {charts.series.legs.map((leg, i) => (
                 <SignalChartPanel key={i} series={leg} />
               ))}
-              {charts.series.combined && <SignalChartPanel series={charts.series.combined} />}
+              {charts.series.combined && (
+                <CombinedStrategyChart
+                  premium={charts.series.combined}
+                  future={charts.series.future}
+                  breakeven={signal.risk_reward.breakeven}
+                />
+              )}
             </div>
           ) : (
             !chartsError && (

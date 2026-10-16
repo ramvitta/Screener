@@ -97,3 +97,17 @@ export function toOpenAlgoBars(candles: readonly Candle[]): OpenAlgoBar[] {
     oi: c.oi ?? undefined,
   }));
 }
+
+/** openalgo-charts `LinePoint` — `time` is UTC seconds, `value` is the y value. */
+export interface OpenAlgoLinePoint {
+  time: number;
+  value: number;
+}
+
+/** Feed-adapter: backend `Candle[]` → openalgo-charts `LinePoint[]` using the
+ * close price as the y value. Used for the combined-premium / underlying
+ * strategy line view (net premium and future are single values over time, so
+ * they draw as a line, not boxes). */
+export function toOpenAlgoLine(candles: readonly Candle[]): OpenAlgoLinePoint[] {
+  return candles.map((c) => ({ time: toUtcSeconds(c.ts), value: c.close }));
+}
