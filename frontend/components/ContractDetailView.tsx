@@ -322,33 +322,6 @@ export default function ContractDetailView({ signalId }: { signalId: string }) {
               </div>
             )
           )}
-
-          {/* LEGS TABLE */}
-          <div className="mt-3.5 flex-shrink-0 rounded-[10px] border p-3" style={{ background: "#12161C", borderColor: "#1F2630" }}>
-            <div className="mb-2 text-[11.5px] font-semibold text-[#C7CDD6]">LEGS</div>
-            <div className="flex flex-col gap-1.5">
-              <div className="grid grid-cols-[0.6fr_0.7fr_1fr_1fr_1fr] gap-1.5 px-1 text-[9.5px] text-[#8B96A5]">
-                <span>Action</span>
-                <span>Strike</span>
-                <span>Delta</span>
-                <span>IV</span>
-                <span>Premium</span>
-              </div>
-              {signal.legs.map((leg, i) => (
-                <div key={i} className="grid grid-cols-[0.6fr_0.7fr_1fr_1fr_1fr] gap-1.5 rounded-[7px] p-2 text-xs" style={{ background: "#0E1116" }}>
-                  <span className={leg.action === "SELL" ? "font-semibold text-[#F85149]" : "font-semibold text-[#3DD68C]"}>
-                    {leg.action}
-                  </span>
-                  <span className="mono">
-                    {leg.strike} {leg.option_type}
-                  </span>
-                  <span className="mono">{leg.delta.toFixed(2)}</span>
-                  <span className="mono">{leg.iv.toFixed(1)}%</span>
-                  <span className="mono text-[#8B96A5]">n/a</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>
