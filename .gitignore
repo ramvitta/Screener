@@ -29,3 +29,7 @@ node_modules/
 # Test/tooling caches
 .hypothesis/
 evals/reports/
+
+# str-stra prototype — keep scripts/docs, ignore generated scan output
+str-stra/*.json
+str-stra/*.png
