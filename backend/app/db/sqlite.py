@@ -211,9 +211,86 @@ BEGIN SELECT RAISE(ABORT, 'invalid strategy_type'); END;
 CREATE TRIGGER IF NOT EXISTS position_legs_qty_insert BEFORE INSERT ON position_legs
 WHEN NEW.qty <= 0 OR NEW.entry_price < 0 OR NEW.strike <= 0
 BEGIN SELECT RAISE(ABORT, 'invalid leg qty/price/strike'); END;
+
+-- Market breadth snapshots (workers/breadth_loop.py). One row per
+-- (bucket, ts): bucket is 'hour' | 'day' | 'week' | 'month'; metrics_json is
+-- free-form ({advancers, decliners, unchanged, breadth_ratio, pct_above:{..},
+-- total, new_highs, new_lows}) so the shape can evolve without a migration.
+CREATE TABLE IF NOT EXISTS breadth_snapshots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    bucket          TEXT NOT NULL CHECK (bucket IN ('hour','day','week','month')),
+    ts              TEXT NOT NULL,
+    metrics_json    TEXT NOT NULL,
+    computed_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(bucket, ts)
+);
+
+-- Morning daily byte: raw Telegram messages (append-only, deduped on
+-- chat_id+message_id). Kept verbatim so future intelligence never needs to
+-- re-fetch Telegram.
+CREATE TABLE IF NOT EXISTS daily_byte_messages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_slot      INTEGER NOT NULL,
+    chat_id         INTEGER NOT NULL,
+    chat_username   TEXT,
+    chat_title      TEXT,
+    message_id      INTEGER NOT NULL,
+    posted_at       TEXT NOT NULL,
+    posted_local    TEXT,
+    edit_date       TEXT,
+    is_pinned       INTEGER NOT NULL DEFAULT 0,
+    is_forward      INTEGER NOT NULL DEFAULT 0,
+    sender_id       INTEGER,
+    sender_username TEXT,
+    sender_name     TEXT,
+    is_bot          INTEGER NOT NULL DEFAULT 0,
+    reply_to_msg_id INTEGER,
+    text            TEXT,
+    entities_json   TEXT,
+    media_type      TEXT,
+    media_json      TEXT,
+    views           INTEGER,
+    forwards        INTEGER,
+    reactions_json  TEXT,
+    word_count      INTEGER,
+    fetched_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(chat_id, message_id)
+);
+
+-- Validated LLM extraction, one per message, versioned (idempotent re-runs,
+-- evolvable prompt/schema without a migration). extracted_json holds the full
+-- structured entities; sentiment/summary are denormalized for cheap queries.
+CREATE TABLE IF NOT EXISTS daily_byte_analyses (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_fk        INTEGER NOT NULL REFERENCES daily_byte_messages(id),
+    analysis_version  TEXT NOT NULL,
+    model             TEXT NOT NULL,
+    extracted_json    TEXT NOT NULL,
+    summary           TEXT,
+    sentiment         TEXT,
+    symbols_json      TEXT,
+    events_json       TEXT,
+    confidence        REAL,
+    is_valid          INTEGER NOT NULL DEFAULT 1,
+    analyzed_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(message_fk, analysis_version)
+);
+
+-- Daily digest: the synthesized "byte" for a calendar day, combining all
+-- configured sources into one brief.
+CREATE TABLE IF NOT EXISTS daily_byte_digests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    date            TEXT NOT NULL,
+    digest_json     TEXT NOT NULL,
+    summary         TEXT,
+    market_bias     TEXT,
+    top_symbols_json TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(date)
+);
 """
 
-SCHEMA_VERSION = 4  # +screener_runs/screener_signals (signal history & rejection audit)
+SCHEMA_VERSION = 5  # +breadth_snapshots / daily_byte_* (breadth + Telegram daily byte)
 
 
 def get_db_path() -> str:

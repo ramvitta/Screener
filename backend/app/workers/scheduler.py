@@ -1,10 +1,14 @@
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.integrations.definedge_client import DefinedgeAuthError
+from app.workers.breadth_loop import run_breadth_job
+from app.workers.daily_byte_loop import run_daily_byte_job
 from app.workers.screener_loop import run_screener_job
+from app.workers.str_stra_loop import run_str_stra_job
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +56,39 @@ def start_scheduler() -> None:
         id="definedge_reauth",
     )
     scheduler.add_job(_retention_job, "interval", hours=24, id="retention")
+    scheduler.add_job(
+        run_str_stra_job,
+        "interval",
+        minutes=settings.str_stra_interval_minutes,
+        id="str_stra_run",
+        next_run_time=None,  # first run triggered explicitly at startup, see main.py
+    )
+    scheduler.add_job(
+        run_breadth_job,
+        "interval",
+        minutes=settings.breadth_interval_minutes,
+        id="breadth_run",
+        next_run_time=None,  # first run triggered explicitly at startup, see main.py
+    )
+    scheduler.add_job(
+        run_daily_byte_job,
+        CronTrigger(
+            hour=settings.telegram_daily_byte_hour,
+            minute=settings.telegram_daily_byte_minute,
+            timezone=settings.telegram_daily_byte_timezone,
+        ),
+        id="daily_byte_run",
+    )
     scheduler.start()
     logger.info(
-        "Scheduler started: screener runs every %s min, Definedge re-auth every %s min",
+        "Scheduler started: screener every %s min, str-stra every %s min, breadth every %s min, "
+        "daily-byte at %02d:%02d %s, Definedge re-auth every %s min",
         settings.screener_interval_minutes,
+        settings.str_stra_interval_minutes,
+        settings.breadth_interval_minutes,
+        settings.telegram_daily_byte_hour,
+        settings.telegram_daily_byte_minute,
+        settings.telegram_daily_byte_timezone,
         DEFINEDGE_REAUTH_INTERVAL_MINUTES,
     )
 

@@ -154,6 +154,19 @@ def list_history(limit: int = 100, offset: int = 0, status: str = None, strategy
     return [_signal_model(r) for r in rows]
 
 
+@router.get("/history/counts", response_model=dict[str, int])
+def history_counts():
+    """Accepted-signal counts grouped by strategy_type — a single cheap COUNT
+    query so the home directory can show live per-family match counts without
+    paging the full history. Defined before /history/{history_id} so the
+    literal 'counts' path wins over the int-converter route."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT strategy_type, COUNT(*) AS n FROM screener_signals WHERE status = 'accepted' GROUP BY strategy_type"
+        ).fetchall()
+    return {r["strategy_type"]: r["n"] for r in rows}
+
+
 @router.get("/history/{history_id}", response_model=SignalHistoryDetail)
 def get_history(history_id: int):
     with get_conn() as conn:

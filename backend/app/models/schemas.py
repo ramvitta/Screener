@@ -45,11 +45,15 @@ class StrategyType(str, Enum):
     bull_put_spread = "bull_put_spread"
     bear_call_spread = "bear_call_spread"
     iron_condor = "iron_condor"
-    # Logged from the Chain & Entry tab (Phase 4) — not screener-generated,
-    # so these never appear in screener_rules' CHECK constraint, only in
-    # position_logs (an unconstrained TEXT column) via POST /api/v1/positions.
+    # Straddle/strangle are loggable positions (Phase 4) AND, since the
+    # str-stra port (workers/str_stra_loop.py), screener-generated signals.
+    # They never appear in screener_rules' CHECK constraint (that table only
+    # holds the three credit-spread rules), only in position_logs/screener_signals.
     straddle = "straddle"
     strangle = "strangle"
+    # str-stra strategy families (screener-only — never a position_logs type).
+    adx_direction = "adx_direction"
+    unified = "unified"
 
 
 class AlertType(str, Enum):
@@ -68,6 +72,7 @@ class DataSource(str, Enum):
     live = "live"
     clickhouse = "clickhouse"
     sample = "sample"
+    openalgo = "openalgo"  # legacy: former str-stra bridge (now sourced from Definedge as "live")
 
 
 class Leg(BaseModel):
@@ -450,3 +455,89 @@ class PruneSignalsResponse(BaseModel):
     deleted_signals: int
     deleted_runs: int
     cutoff: date
+
+
+# --- Morning daily byte (Telegram via Telethon) ---
+
+
+class ByteSymbolCall(BaseModel):
+    ticker: str
+    direction: Optional[str] = None  # long | short | neutral
+    target: Optional[float] = None
+    stop_loss: Optional[float] = None
+    horizon: Optional[str] = None
+
+
+class ByteEvent(BaseModel):
+    name: str
+    date: Optional[str] = None
+    impact: Optional[str] = None  # high | medium | low
+
+
+class ByteGlobalCue(BaseModel):
+    instrument: str
+    direction: Optional[str] = None  # up | down | flat
+
+
+class DailyByteAnalysis(BaseModel):
+    """Validated LLM extraction from one daily-byte message. Every field is
+    Optional / defaulted so a partial extraction still parses; the model is
+    never trusted to fill anything it didn't see in the text."""
+
+    sentiment: Optional[str] = None  # bullish | bearish | neutral | risk-on | risk-off | unknown
+    confidence: Optional[float] = None
+    nifty_level: Optional[float] = None
+    nifty_bias: Optional[str] = None
+    nifty_support: List[float] = Field(default_factory=list)
+    nifty_resistance: List[float] = Field(default_factory=list)
+    nifty_targets: List[float] = Field(default_factory=list)
+    banknifty_level: Optional[float] = None
+    banknifty_bias: Optional[str] = None
+    banknifty_support: List[float] = Field(default_factory=list)
+    banknifty_resistance: List[float] = Field(default_factory=list)
+    symbols: List[ByteSymbolCall] = Field(default_factory=list)
+    sectors: List[str] = Field(default_factory=list)
+    events: List[ByteEvent] = Field(default_factory=list)
+    global_cues: List[ByteGlobalCue] = Field(default_factory=list)
+    strategy_type: Optional[str] = None
+    advance_decline: Optional[str] = None
+    fii_dii: Optional[str] = None
+    warnings: List[str] = Field(default_factory=list)
+
+
+class DailyByteSource(BaseModel):
+    group_slot: int
+    chat_username: Optional[str] = None
+    chat_title: Optional[str] = None
+    posted_at: Optional[datetime] = None
+    text: str
+    summary: Optional[str] = None
+    analysis: Optional[DailyByteAnalysis] = None
+    is_valid: bool = False
+
+
+class DailyByteDigestResponse(BaseModel):
+    date: str
+    market_bias: Optional[str] = None
+    summary: Optional[str] = None
+    top_symbols: List[ByteSymbolCall] = Field(default_factory=list)
+    sources: List[DailyByteSource] = Field(default_factory=list)
+
+
+# --- Market breadth ---
+
+
+class BreadthSnapshot(BaseModel):
+    bucket: str  # hour | day | week | month
+    ts: str
+    metrics: dict
+
+
+class BreadthResponse(BaseModel):
+    universe: str
+    total: int
+    as_of: Optional[datetime] = None
+    intraday: List[BreadthSnapshot] = Field(default_factory=list)
+    daily: List[BreadthSnapshot] = Field(default_factory=list)
+    weekly: List[BreadthSnapshot] = Field(default_factory=list)
+    monthly: List[BreadthSnapshot] = Field(default_factory=list)

@@ -28,6 +28,7 @@ import httpx
 from app.config import settings
 from app.core.logging import register_secret
 from app.models.schemas import ScreenerSignal, StrategyType
+from app.reasoning.client import chat_completion
 from app.reasoning.validator import check_reason
 from app.screener import technicals
 from app.screener.engine import MIN_IV_HISTORY, OptionChainSnapshot
@@ -77,28 +78,7 @@ def build_facts(signal: ScreenerSignal, snapshot: OptionChainSnapshot) -> Dict[s
 async def _chat(messages: List[Dict[str, str]]) -> Optional[str]:
     """One OpenAI-compatible /chat/completions call; returns the assistant text
     or None on empty/refusal. Any endpoint speaking the OpenAI protocol works."""
-    async with httpx.AsyncClient(
-        base_url=settings.llm_api_base_url,
-        timeout=settings.llm_reason_timeout_seconds,
-    ) as client:
-        response = await client.post(
-            "/chat/completions",
-            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-            json={
-                "model": settings.llm_reason_model,
-                "messages": messages,
-                "max_tokens": 500,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-    choices = data.get("choices") or []
-    if not choices:
-        return None
-    content = (choices[0].get("message") or {}).get("content")
-    if not isinstance(content, str):
-        return None
-    return content.strip() or None
+    return await chat_completion(messages, settings.llm_reason_model)
 
 
 async def llm_reason(signal: ScreenerSignal, snapshot: OptionChainSnapshot) -> Optional[str]:

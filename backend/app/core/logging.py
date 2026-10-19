@@ -53,6 +53,7 @@ def register_settings_secrets(s) -> None:
         "api_auth_token",
         "session_encryption_key",
         "llm_api_key",
+        "telegram_api_hash",
     ):
         register_secret(getattr(s, name, ""))
 

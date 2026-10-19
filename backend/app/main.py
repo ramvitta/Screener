@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -16,7 +17,9 @@ from app.core.security import require_auth
 from app.db import sqlite
 from app.integrations.definedge_client import DefinedgeAuthError
 from app.workers.scheduler import start_scheduler, stop_scheduler
+from app.workers.breadth_loop import run_breadth_job
 from app.workers.screener_loop import run_screener_job
+from app.workers.str_stra_loop import run_str_stra_job
 
 LOG_FILE = Path(__file__).resolve().parents[2] / "logs" / "backend.log"
 
@@ -58,6 +61,10 @@ async def lifespan(app: FastAPI):
 
     start_scheduler()
     await run_screener_job()  # populate the cache immediately instead of waiting for the first interval
+    await run_str_stra_job()  # populate str-stra signals (degraded → no signals if Definedge is down)
+    # Breadth fetches the full universe (~200 symbols) of daily candles, so kick
+    # it off in the background rather than blocking startup on ~70s of history.
+    asyncio.create_task(run_breadth_job())
     yield
     stop_scheduler()
 
