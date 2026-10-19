@@ -10,6 +10,11 @@ export function formatPct(value: number, digits = 0): string {
 }
 
 export function formatStrategyLabel(strategy: string): string {
+  const overrides: Record<string, string> = {
+    adx_direction: "ADX Direction",
+    unified: "Unified",
+  };
+  if (overrides[strategy]) return overrides[strategy];
   return strategy
     .split("_")
     .map((w) => w[0].toUpperCase() + w.slice(1))

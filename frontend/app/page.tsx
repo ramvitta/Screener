@@ -1,5 +1,5 @@
-import LiveDashboard from "@/components/LiveDashboard";
+import HomeView from "@/components/HomeView";
 
-export default function Home() {
-  return <LiveDashboard />;
+export default function HomePage() {
+  return <HomeView />;
 }

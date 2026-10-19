@@ -5,16 +5,18 @@ import type { MouseEvent } from "react";
 import { daysToExpiry, formatCurrency, formatDate, formatPct, formatRatio, riskAdjustedReturn } from "@/lib/format";
 import type { ScreenerSignal } from "@/lib/types";
 
-// bull_put_spread/iron_condor/bear_call_spread are the only strategies the
-// screener actually emits — straddle/strangle exist on StrategyType only for
-// positions logged from the Chain & Entry tab, never as a screener signal —
-// but the map covers all of StrategyType so indexing stays type-safe.
+// Covers all of StrategyType so indexing stays type-safe. The three credit
+// spreads are the Definedge live feed; straddle/strangle/adx_direction/unified
+// are str-stra (Definedge) signals that only appear in the per-strategy history
+// pages, never in this live card.
 const STRATEGY_STYLES: Record<ScreenerSignal["strategy_type"], { accent: string; badgeBg: string; badgeFg: string; label: string }> = {
   bull_put_spread: { accent: "#3DD68C", badgeBg: "#173324", badgeFg: "#3DD68C", label: "BULL PUT SPREAD" },
   iron_condor: { accent: "#5B9BD5", badgeBg: "#152538", badgeFg: "#5B9BD5", label: "IRON CONDOR" },
   bear_call_spread: { accent: "#F0B429", badgeBg: "#241A12", badgeFg: "#F0B429", label: "BEAR CALL SPREAD" },
   straddle: { accent: "#8B96A5", badgeBg: "#1B2129", badgeFg: "#8B96A5", label: "STRADDLE" },
   strangle: { accent: "#8B96A5", badgeBg: "#1B2129", badgeFg: "#8B96A5", label: "STRANGLE" },
+  adx_direction: { accent: "#5B9BD5", badgeBg: "#152538", badgeFg: "#5B9BD5", label: "ADX DIRECTION" },
+  unified: { accent: "#F0B429", badgeBg: "#241A12", badgeFg: "#F0B429", label: "UNIFIED" },
 };
 
 function LegChip({ leg }: { leg: ScreenerSignal["legs"][number] }) {

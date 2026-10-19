@@ -91,6 +91,9 @@ export default function TopBar({
           </span>
         )}
       </div>
+      <Link href="/breadth" className="text-xs text-[#8B96A5]" title="Market breadth: advance/decline + % above DMA">
+        Breadth
+      </Link>
       <Link href="/history" className="text-xs text-[#8B96A5]" title="Signal history: accepted + rejected signals">
         History
       </Link>

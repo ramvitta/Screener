@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import TopBar from "./TopBar";
 import ExpiryStrip, { type ExpiryChip } from "./ExpiryStrip";
@@ -26,6 +27,7 @@ import {
   triggerRelogin,
 } from "@/lib/api";
 import type { Alert, BackfillStatus, BrokerSessionInfo, IndexQuote, Position, ScreenerSignal, ScreenerStatus, StrategyType } from "@/lib/types";
+import { isStrategyType } from "@/lib/strategies";
 
 const POLL_MS = 5000;
 const LTP_REFRESH_MS = 5000;
@@ -47,6 +49,8 @@ const TABS: { key: Tab; label: string }[] = [
  * is unreachable — a stale hardcoded fallback previously masked real bugs
  * (see the 29-Sep expired-contract issue) by looking like live data. */
 export default function LiveDashboard() {
+  const searchParams = useSearchParams();
+  const strategyParam = searchParams.get("strategy");
   const [connected, setConnected] = useState(false);
   const [signals, setSignals] = useState<ScreenerSignal[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -58,7 +62,9 @@ export default function LiveDashboard() {
   const [availableMargin, setAvailableMargin] = useState<number | null>(null);
   const [screenerStatus, setScreenerStatus] = useState<ScreenerStatus | null>(null);
 
-  const [strategyFilter, setStrategyFilter] = useState<StrategyType | "all">("all");
+  const [strategyFilter, setStrategyFilter] = useState<StrategyType | "all">(
+    isStrategyType(strategyParam) ? strategyParam : "all",
+  );
   const [expiryFilter, setExpiryFilter] = useState<ExpiryChip | null>(null);
   const [tab, setTab] = useState<Tab>("signals");
 

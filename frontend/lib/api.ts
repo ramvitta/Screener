@@ -1,8 +1,10 @@
 import type {
   Alert,
   BackfillStatus,
+  BreadthResponse,
   BrokerSessionInfo,
   ChainResponse,
+  DailyByteDigestResponse,
   DownloadCoverageRow,
   DownloadJobItemStatus,
   DownloadJobStatus,
@@ -175,6 +177,12 @@ export async function fetchSignalHistoryDetail(id: number): Promise<SignalHistor
   return getJson<SignalHistoryDetail>(`/api/v1/screener/history/${id}`);
 }
 
+/** Accepted-signal counts keyed by strategy_type — one cheap COUNT query for
+ * the home directory's per-family match tiles. */
+export async function fetchHistoryCounts(): Promise<Record<string, number>> {
+  return getJson<Record<string, number>>("/api/v1/screener/history/counts");
+}
+
 /** Forces a fresh Definedge session via TOTP auto-login (POST
  * /api/v1/auth/definedge/relogin — see backend/app/api/routes/auth.py). The
  * backend already logs in automatically at startup and on an hourly
@@ -191,7 +199,7 @@ export async function triggerRelogin(): Promise<{ expires_at: string }> {
  * `reversal` are fetch-level parameters — changing them re-fetches rather than
  * recomputing client-side. */
 export async function fetchChartTransforms(
-  signal: Pick<ScreenerSignal, "symbol" | "expiry" | "legs">,
+  signal: { symbol: string; expiry: string; legs: { strike: number; option_type: "CE" | "PE"; action: "BUY" | "SELL" }[] },
   opts: { interval?: number; futureBoxPct?: number; optionBoxPct?: number; combinedBoxPct?: number; reversal?: number } = {},
 ): Promise<ChartTransformsResponse> {
   const res = await fetch(`${API_BASE_URL}/api/v1/charts/transforms?interval=${opts.interval ?? 5}`, {
@@ -209,6 +217,32 @@ export async function fetchChartTransforms(
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`charts/transforms -> ${res.status}`);
+  return res.json();
+}
+
+/** P&F / Renko / candlestick transforms for a str-stra (stock F&O) signal's
+ * legs (POST /api/v1/charts/stock/transforms). Same shape as
+ * fetchChartTransforms but resolves stock contracts; `legs` may be empty for
+ * directional ADX/unified signals (underlying only). */
+export async function fetchStockChartTransforms(
+  signal: { symbol: string; expiry: string; legs: { strike: number; option_type: "CE" | "PE"; action: "BUY" | "SELL" }[] },
+  opts: { interval?: number; futureBoxPct?: number; optionBoxPct?: number; combinedBoxPct?: number; reversal?: number } = {},
+): Promise<ChartTransformsResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/charts/stock/transforms?interval=${opts.interval ?? 5}`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      symbol: signal.symbol,
+      expiry: signal.expiry,
+      legs: signal.legs.map((leg) => ({ strike: leg.strike, option_type: leg.option_type, action: leg.action })),
+      future_box_pct: opts.futureBoxPct,
+      option_box_pct: opts.optionBoxPct,
+      combined_box_pct: opts.combinedBoxPct,
+      reversal: opts.reversal,
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`charts/stock/transforms -> ${res.status}`);
   return res.json();
 }
 
@@ -362,4 +396,18 @@ export async function stopDownloadJob(jobId: number): Promise<DownloadJobStatus>
 
 export async function fetchDownloadCoverage(symbol: string): Promise<DownloadCoverageRow[]> {
   return getJson<DownloadCoverageRow[]>(`/api/v1/admin/history/coverage?symbol=${symbol}`);
+}
+
+/** GET /api/v1/market/breadth — the cached advance/decline + %-above-DMA
+ * series across four granularities (populated by workers/breadth_loop.py). */
+export async function fetchBreadth(): Promise<BreadthResponse> {
+  return getJson<BreadthResponse>("/api/v1/market/breadth");
+}
+
+/** GET /api/v1/market/daily-byte — the Morning Daily Byte digest + per-source
+ * messages and their validated LLM analyses (populated by
+ * workers/daily_byte_loop.py). Defaults to today (IST). */
+export async function fetchDailyByte(date?: string): Promise<DailyByteDigestResponse> {
+  const q = date ? `?dt=${date}` : "";
+  return getJson<DailyByteDigestResponse>(`/api/v1/market/daily-byte${q}`);
 }

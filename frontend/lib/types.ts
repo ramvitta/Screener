@@ -1,6 +1,6 @@
 export type OptionType = "CE" | "PE";
 export type LegAction = "BUY" | "SELL";
-export type StrategyType = "bull_put_spread" | "bear_call_spread" | "iron_condor" | "straddle" | "strangle";
+export type StrategyType = "bull_put_spread" | "bear_call_spread" | "iron_condor" | "straddle" | "strangle" | "adx_direction" | "unified";
 export type AlertType =
   | "screener_signal"
   | "profit_target"
@@ -42,7 +42,7 @@ export interface ScreenerSignal {
   risk_reward: RiskReward;
   reason: string;
   generated_at: string; // ISO datetime
-  data_source: "live" | "clickhouse" | "sample";
+  data_source: "live" | "clickhouse" | "sample" | "openalgo";
   reason_source?: "template" | "llm";
 }
 
@@ -302,7 +302,7 @@ export interface DownloadCoverageRow {
 export interface ScreenerRun {
   run_id: string;
   started_at: string;
-  data_source: "live" | "clickhouse" | "sample" | null;
+  data_source: "live" | "clickhouse" | "sample" | "openalgo" | null;
   status: "ok" | "sample" | "degraded";
   message: string;
   signal_count: number;
@@ -343,6 +343,32 @@ export interface SignalDecisionComputed {
   net_vega: number | null;
   net_gamma: number | null;
   detail?: string | null;
+  // --- str-stra signals (straddle/strangle/adx_direction/unified) ---
+  adx?: number | null;
+  adx_change_pct?: number | null;
+  adx_trend?: string | null;
+  plus_di?: number | null;
+  minus_di?: number | null;
+  dmi_trend?: string | null;
+  candle_type?: string | null;
+  volume_pct?: number | null;
+  comment?: string | null;
+  pattern?: string | null;
+  fut_ltp?: number | null;
+  atm?: number | null;
+  ce_ltp?: number | null;
+  pe_ltp?: number | null;
+  spread_pct?: number | null;
+  straddle_prem?: number | null;
+  straddle_val?: number | null;
+  strangle_prem?: number | null;
+  strangle_val?: number | null;
+  tier?: string | null;
+  n_pass?: number | null;
+  adx_pass?: boolean | null;
+  candle_pass?: boolean | null;
+  straddle_pass?: boolean | null;
+  lot?: number | null;
 }
 
 export interface SignalDecision {
@@ -351,11 +377,144 @@ export interface SignalDecision {
   reject_reason: string | null;
 }
 
+/** A single option leg stored inside a str-stra signal's `signal_json` —
+ * carries the premium the signal was priced from (unlike `Leg`, which also
+ * carries delta/IV from the Definedge pricing path). */
+export interface StrStraLeg {
+  strike: number;
+  option_type: OptionType;
+  action: LegAction;
+  price: number | null;
+}
+
+/** The raw metrics dict persisted as a str-stra signal's `signal_json`. The
+ * str-stra pipeline only receives LTPs from Definedge (no IV/greeks), so it
+ * stores its computed fields directly rather than a full `ScreenerSignal`.
+ * `legs` is added by the worker so the detail view can chart the underlying
+ * + combined premium. */
+export interface StrStraSignalJson {
+  symbol: string;
+  lot: number;
+  step: number;
+  lcp: number;
+  pct_chg: number;
+  adx: number;
+  adx_chg_pct: number;
+  adx_trend: string;
+  dmi_trend: string;
+  candle_type: string;
+  comment: string;
+  pattern: string;
+  volume_pct: number;
+  atm: number | null;
+  fut_ltp: number | null;
+  ce_ltp: number | null;
+  pe_ltp: number | null;
+  otm_ce: number | null;
+  otm_pe: number | null;
+  spread_pct: number | null;
+  straddle_prem: number | null;
+  strangle_prem: number | null;
+  tier: string;
+  n_pass: number;
+  legs: StrStraLeg[];
+  [key: string]: unknown;
+}
+
 export interface SignalHistoryDetail extends SignalHistoryItem {
-  signal_json: ScreenerSignal | null;
+  signal_json: ScreenerSignal | StrStraSignalJson | null;
   decision_json: SignalDecision | null;
 }
 
 export interface ScreenerRunDetail extends ScreenerRun {
   signals: SignalHistoryDetail[];
+}
+
+// --- Market breadth ---
+
+export interface BreadthMetrics {
+  advancers: number;
+  decliners: number;
+  unchanged: number;
+  breadth_ratio: number | null;
+  pct_above: Record<string, number | null>;
+  total: number;
+}
+
+export interface BreadthSnapshot {
+  bucket: "hour" | "day" | "week" | "month";
+  ts: string;
+  metrics: BreadthMetrics;
+}
+
+export interface BreadthResponse {
+  universe: string;
+  total: number;
+  as_of: string | null;
+  intraday: BreadthSnapshot[];
+  daily: BreadthSnapshot[];
+  weekly: BreadthSnapshot[];
+  monthly: BreadthSnapshot[];
+}
+
+// --- Morning Daily Byte ---
+
+export interface ByteSymbolCall {
+  ticker: string;
+  direction?: string | null;
+  target?: number | null;
+  stop_loss?: number | null;
+  horizon?: string | null;
+}
+
+export interface ByteEvent {
+  name: string;
+  date?: string | null;
+  impact?: string | null;
+}
+
+export interface ByteGlobalCue {
+  instrument: string;
+  direction?: string | null;
+}
+
+export interface DailyByteAnalysis {
+  sentiment?: string | null;
+  confidence?: number | null;
+  nifty_level?: number | null;
+  nifty_bias?: string | null;
+  nifty_support: number[];
+  nifty_resistance: number[];
+  nifty_targets: number[];
+  banknifty_level?: number | null;
+  banknifty_bias?: string | null;
+  banknifty_support: number[];
+  banknifty_resistance: number[];
+  symbols: ByteSymbolCall[];
+  sectors: string[];
+  events: ByteEvent[];
+  global_cues: ByteGlobalCue[];
+  strategy_type?: string | null;
+  advance_decline?: string | null;
+  fii_dii?: string | null;
+  warnings: string[];
+}
+
+export interface DailyByteSource {
+  group_slot: number;
+  chat_username?: string | null;
+  chat_title?: string | null;
+  posted_at?: string | null;
+  text: string;
+  summary?: string | null;
+  analysis?: DailyByteAnalysis | null;
+  is_valid: boolean;
+}
+
+export interface DailyByteDigestResponse {
+  date: string;
+  market_bias?: string | null;
+  summary?: string | null;
+  top_symbols: ByteSymbolCall[];
+  sources: DailyByteSource[];
 }
