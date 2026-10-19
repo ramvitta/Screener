@@ -14,7 +14,10 @@ from app.integrations.instruments import (
     ResolvedContract,
     find_future,
     find_option,
+    find_stock_future,
+    find_stock_option,
     get_master_rows,
+    list_future_expiries,
     resolve_nifty_atm_contracts,
 )
 
@@ -375,6 +378,101 @@ async def chart_transforms(
         future = find_future(rows, payload.symbol, date.today())
         leg_contracts = [
             find_option(rows, payload.symbol, payload.expiry, leg.strike, leg.option_type) for leg in payload.legs
+        ]
+    except DefinedgeAuthError:
+        raise HTTPException(status_code=401, detail="Not authenticated with Definedge") from None
+    except ContractNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+
+    future_candles = await chart_history.ensure_chart_history(
+        _client, exchange=future.exchange, token=future.token, symbol=payload.symbol,
+        kind="future", expiry=future.expiry,
+    )
+    leg_candles = [
+        await chart_history.ensure_chart_history(
+            _client, exchange=c.exchange, token=c.token, symbol=payload.symbol,
+            kind="option", expiry=c.expiry, strike=leg.strike, option_type=leg.option_type,
+        )
+        for c, leg in zip(leg_contracts, payload.legs, strict=True)
+    ]
+
+    future_series = _build_series(
+        f"{payload.symbol}-I", future.trading_symbol, future.strike, future.expiry,
+        future_candles, payload.future_box_pct, payload.reversal, interval,
+    )
+    leg_series = [
+        _build_series(
+            f"{leg.action} {payload.symbol} {int(leg.strike)} {leg.option_type}",
+            c.trading_symbol, c.strike, c.expiry,
+            candles, payload.option_box_pct, payload.reversal, interval,
+        )
+        for c, leg, candles in zip(leg_contracts, payload.legs, leg_candles, strict=True)
+    ]
+
+    combined = None
+    if len(leg_series) >= 2:
+        label = " + ".join(f"{leg.action} {int(leg.strike)}{leg.option_type}" for leg in payload.legs)
+        combined_candles = _combine_candles(leg_candles, [leg.action for leg in payload.legs])
+        combined = _build_series(
+            label, label, None, leg_contracts[0].expiry,
+            combined_candles, payload.combined_box_pct, payload.reversal, interval,
+        )
+
+    return {
+        "as_of": datetime.now(IST).isoformat(),
+        "interval_minutes": interval,
+        "reversal": payload.reversal,
+        "series": {
+            "future": future_series,
+            "legs": leg_series,
+            "combined": combined,
+        },
+    }
+
+
+def _resolve_stock_expiry(rows: List[dict], symbol: str, preferred: date) -> date:
+    """Expiry to chart a stock F&O (str-stra) signal. The str-stra pipeline
+    targets a configured expiry that can go stale vs. NSE's monthly roll, so
+    prefer the signal's expiry when it still lists contracts, else fall back to
+    the nearest current future expiry."""
+    try:
+        find_stock_future(rows, symbol, preferred)
+        return preferred
+    except ContractNotFound:
+        try:
+            return list_future_expiries(rows, symbol, date.today())[0]
+        except IndexError:
+            raise ContractNotFound(f"No {symbol} future expiry on/after {date.today()}") from None
+
+
+@router.post("/stock/transforms")
+async def stock_chart_transforms(
+    payload: TransformsRequest,
+    interval: int = Query(5, description="Candlestick size in minutes (Renko/P&F stay 1-min)"),
+):
+    """P&F / Renko / candlestick transforms for a str-stra (stock F&O) signal.
+
+    Mirrors POST /charts/transforms but resolves stock contracts (FUTSTK /
+    OPTSTK) via find_stock_future / find_stock_option instead of the index
+    resolvers. `legs` may be empty (ADX-direction / unified directional
+    signals): then only the underlying future series is returned — no combined
+    premium applies. For a straddle/strangle the SELL CE + SELL PE legs sum to
+    the combined premium the signal collects.
+    """
+    if interval not in VALID_INTERVALS:
+        raise HTTPException(status_code=400, detail=f"interval must be one of {sorted(VALID_INTERVALS)}")
+    if payload.future_box_pct <= 0 or payload.option_box_pct <= 0 or payload.combined_box_pct <= 0:
+        raise HTTPException(status_code=400, detail="future_box_pct, option_box_pct and combined_box_pct must be positive")
+    if payload.reversal < 1:
+        raise HTTPException(status_code=400, detail="reversal must be >= 1")
+
+    try:
+        await ensure_authenticated()
+        rows = await get_master_rows(_client)
+        expiry = _resolve_stock_expiry(rows, payload.symbol, payload.expiry)
+        future = find_stock_future(rows, payload.symbol, expiry)
+        leg_contracts = [
+            find_stock_option(rows, payload.symbol, expiry, leg.strike, leg.option_type) for leg in payload.legs
         ]
     except DefinedgeAuthError:
         raise HTTPException(status_code=401, detail="Not authenticated with Definedge") from None
