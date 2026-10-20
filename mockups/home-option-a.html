@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Home — Option A Mockup (sample data)</title>
+<style>
+  :root {
+    --bg: #0B0E11;
+    --card: #12161C;
+    --tile: #0E1116;
+    --border: #1F2630;
+    --tile-border: #1A2028;
+    --text: #E8EAED;
+    --text-2: #C7CDD6;
+    --text-3: #A7AFBA;
+    --muted: #8B96A5;
+    --faint: #5B6675;
+    --green: #3DD68C;
+    --red: #F85149;
+    --amber: #F0B429;
+    --blue: #5B9BD5;
+    --chip: #1B2129;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    font-size: 13px;
+  }
+  .mono { font-family: "Cascadia Mono", "Consolas", monospace; }
+
+  .app { height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ─────────────────────────────── */
+  .hdr {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; height: 48px; flex-shrink: 0;
+    border-bottom: 1px solid var(--border); background: #0D1015;
+  }
+  .hdr .brand { display: flex; align-items: center; gap: 10px; }
+  .logo {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: linear-gradient(135deg, #2B7DE0, #173324);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 11px; color: #fff;
+  }
+  .brand b { font-size: 13px; letter-spacing: 1px; }
+  .nav { display: flex; gap: 2px; }
+  .nav a {
+    color: var(--muted); text-decoration: none; font-size: 12px;
+    padding: 6px 12px; border-radius: 7px;
+  }
+  .nav a.active { color: var(--text); background: #161B22; }
+  .nav a:hover { color: var(--text-2); }
+  .quote { display: flex; align-items: baseline; gap: 8px; }
+  .quote .sym { color: var(--muted); font-size: 12px; }
+  .quote .px { font-size: 17px; font-weight: 700; }
+  .quote .chg { color: var(--green); font-size: 12px; font-weight: 600; }
+
+  /* ── Layout ────────────────────────────── */
+  .content {
+    flex: 1; min-height: 0;
+    display: flex; gap: 16px; padding: 16px 20px;
+  }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .rail { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .card-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+  }
+  .card-hd .t { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--text-2); }
+  .card-hd .n { font-size: 10px; color: var(--faint); }
+  .link { color: var(--blue); font-size: 11px; font-weight: 600; text-decoration: none; }
+
+  .badge { font-size: 10px; font-weight: 800; border-radius: 5px; padding: 3px 8px; letter-spacing: .5px; }
+  .b-green { background: #173324; color: var(--green); }
+  .b-chip  { background: var(--chip); color: var(--muted); }
+  .b-blue  { background: #14263A; color: var(--blue); }
+
+  /* ── Morning brief ─────────────────────── */
+  .brief { border-left: 3px solid var(--blue); padding: 14px 16px; }
+  .brief p { margin: 8px 0 10px; color: var(--text-2); line-height: 1.55; font-size: 12.5px; }
+  .wl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .wl .lbl { font-size: 10px; color: var(--muted); margin-right: 4px; }
+  .wl span.s { background: var(--chip); border-radius: 5px; padding: 3px 8px; font-size: 11px; font-weight: 600; color: var(--text-3); }
+
+  /* ── Signals ───────────────────────────── */
+  .signals { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .sig-list { flex: 1; overflow-y: auto; }
+  .sig {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 14px; border-bottom: 1px solid var(--tile-border);
+  }
+  .sig:hover { background: var(--tile); }
+  .sig .bar { width: 3px; align-self: stretch; border-radius: 2px; }
+  .sig .tag { font-size: 10px; font-weight: 800; border-radius: 5px; padding: 3px 8px; }
+  .sig .sym { font-weight: 600; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+  .sig .exp { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .sig .why { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: var(--muted); }
+  .sig .when { font-size: 10px; color: var(--faint); white-space: nowrap; }
+  .sig .go { color: var(--green); font-size: 11px; }
+
+  /* ── Strategy directory ─────────────────── */
+  .strat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .strat {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .strat:hover { border-color: #2E3844; }
+  .strat .top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .strat .fam { font-size: 11px; font-weight: 800; border-radius: 5px; padding: 3px 8px; letter-spacing: .5px; }
+  .strat .cnt { text-align: right; }
+  .strat .cnt .l { font-size: 9.5px; color: var(--muted); }
+  .strat .cnt .v { font-size: 15px; font-weight: 700; color: var(--green); }
+  .strat .tl { font-size: 12px; font-weight: 600; color: var(--text-2); }
+  .strat .ds { font-size: 11.5px; color: var(--text-3); line-height: 1.45; }
+  .strat .ft { margin-top: auto; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  .strat .ft .open { border: 1px solid #232C36; border-radius: 7px; padding: 4px 12px; }
+
+  /* ── Tiles (market pulse / breadth) ────── */
+  .tiles { padding: 12px; display: grid; gap: 8px; }
+  .pulse .tiles { grid-template-columns: repeat(3, 1fr); }
+  .breadth .tiles { grid-template-columns: repeat(3, 1fr); }
+  .tile {
+    background: var(--tile); border: 1px solid var(--tile-border); border-radius: 9px;
+    padding: 10px 12px;
+  }
+  .tile .l { font-size: 9.5px; color: var(--muted); }
+  .tile .v { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .t-green { color: var(--green); } .t-red { color: var(--red); }
+  .t-amber { color: var(--amber); } .t-plain { color: var(--text); }
+
+  .breadth { border-left: 3px solid var(--green); }
+  .breadth .foot { display: flex; justify-content: space-between; padding: 0 14px 12px; font-size: 10px; color: var(--faint); }
+
+  /* ── Decision parameters ───────────────── */
+  .rules { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .rule { display: flex; align-items: center; gap: 10px; font-size: 11px; }
+  .rule .k { width: 92px; color: var(--muted); }
+  .rule .v { width: 70px; font-weight: 700; }
+  .rule .sw { width: 34px; height: 6px; border-radius: 3px; }
+
+  .mock-note {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: #1B2129; color: var(--muted); font-size: 10px; letter-spacing: .5px;
+    padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border);
+    z-index: 10; pointer-events: none;
+  }
+
+  @media (max-width: 1100px) {
+    .rail { width: 320px; }
+    .strat-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="brand">
+      <div class="logo">SC</div>
+      <b>SCREENER</b>
+    </div>
+    <div class="nav">
+      <a class="active" href="#">Home</a>
+      <a href="#">Screener</a>
+      <a href="#">Breadth</a>
+      <a href="#">History</a>
+      <a href="#">Daily Byte</a>
+      <a href="#">Telegram</a>
+    </div>
+    <div class="quote">
+      <span class="sym">NIFTY</span>
+      <span class="px mono">25,214.50</span>
+      <span class="chg mono">+0.34%</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ══ MAIN column: stretches to fill all remaining width ══ -->
+    <div class="main">
+
+      <!-- Morning brief -->
+      <div class="card brief">
+        <div class="card-hd" style="border:none;padding:0 0 8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="t" style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-2);">MORNING DAILY BYTE</span>
+            <span style="font-size:10px;color:var(--faint);">Mon, Oct 20</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="badge b-green">BULLISH</span>
+            <a class="link" href="#">Full brief →</a>
+          </div>
+        </div>
+        <p>NIFTY held above 25,200 with support from banks and IT. FIIs net sellers in cash, but heavy call writing was absent — IV cooled 40bps overnight. Breadth improving mid-week; stay with premium-selling ranges until a directional close above 25,400.</p>
+        <div class="wl">
+          <span class="lbl">WATCHLIST</span>
+          <span class="s">RELIANCE</span><span class="s">HDFCBANK</span><span class="s">TCS</span>
+          <span class="s">INFY</span><span class="s">SBIN</span><span class="s">TATAMOTORS</span><span class="s">NIFTY</span>
+        </div>
+      </div>
+
+      <!-- Recent signals (internal scroll — page itself doesn't grow) -->
+      <div class="card signals">
+        <div class="card-hd">
+          <span class="t">RECENT SIGNALS</span>
+          <a class="link" href="#">View all →</a>
+        </div>
+        <div class="sig-list">
+          <div class="sig"><span class="bar" style="background:#5B9BD5"></span><span class="tag" style="background:#14263A;color:#5B9BD5">UNIFIED</span><span class="sym">SBIN</span><span class="exp">Exp 30-Oct</span><span class="why">IV rank 62 · RSI 48 · DTE 10 · credit/max-loss 0.41 — Iron Condor band</span><span class="when">10:42</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#F0B429"></span><span class="tag" style="background:#2E2410;color:#F0B429">INCOME SPREADS</span><span class="sym">TCS</span><span class="exp">Exp 30-Oct</span><span class="why">Short 4150PE/Long 4100PE · credit ₹18 · POP 71% · Δ 0.21</span><span class="when">10:31</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#3DD68C"></span><span class="tag" style="background:#173324;color:#3DD68C">STRADDLE</span><span class="sym">INFY</span><span class="exp">Exp 30-Oct</span><span class="why">Post-earnings IV crush setup · straddle at 1850 · theta-positive</span><span class="when">10:15</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#F85149"></span><span class="tag" style="background:#2E1414;color:#F85149">ADX DIRECTION</span><span class="sym">RELIANCE</span><span class="exp">Exp 06-Nov</span><span class="why">ADX 34 rising · DI+ > DI- · trend continuation long bias</span><span class="when">09:58</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#5B9BD5"></span><span class="tag" style="background:#14263A;color:#5B9BD5">UNIFIED</span><span class="sym">HDFCBANK</span><span class="exp">Exp 30-Oct</span><span class="why">IV rank 47 · RSI 52 · DTE 12 · credit/max-loss 0.35</span><span class="when">09:47</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#F0B429"></span><span class="tag" style="background:#2E2410;color:#F0B429">INCOME SPREADS</span><span class="sym">TATAMOTORS</span><span class="exp">Exp 30-Oct</span><span class="why">Short 950CE/Long 1000CE · credit ₹14 · POP 68%</span><span class="when">09:33</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#3DD68C"></span><span class="tag" style="background:#173324;color:#3DD68C">STRANGLE</span><span class="sym">NIFTY</span><span class="exp">Exp 06-Nov</span><span class="why">Range 24,900–25,500 · IV 12.6 · short both wings</span><span class="when">09:20</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#F0B429"></span><span class="tag" style="background:#2E2410;color:#F0B429">INCOME SPREADS</span><span class="sym">SBIN</span><span class="exp">Exp 30-Oct</span><span class="why">Short 820PE/Long 780PE · credit ₹11 · POP 74%</span><span class="when">09:12</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#F85149"></span><span class="tag" style="background:#2E1414;color:#F85149">ADX DIRECTION</span><span class="sym">TCS</span><span class="exp">Exp 30-Oct</span><span class="why">ADX 28 rising · DI- > DI+ · bearish bias watch</span><span class="when">09:05</span><span class="go">→</span></div>
+          <div class="sig"><span class="bar" style="background:#3DD68C"></span><span class="tag" style="background:#173324;color:#3DD68C">STRADDLE</span><span class="sym">NIFTY</span><span class="exp">Exp 30-Oct</span><span class="why">Earnings-neutral range · straddle 25,200 expiry week</span><span class="when">08:58</span><span class="go">→</span></div>
+        </div>
+      </div>
+
+      <!-- Strategy directory -->
+      <div class="strat-grid">
+        <div class="strat">
+          <div class="top">
+            <span class="fam" style="background:#14263A;color:#5B9BD5">UNIFIED SCREENER</span>
+            <div class="cnt"><div class="l">MATCHES</div><div class="v mono">8</div></div>
+          </div>
+          <div class="tl">Every family&apos;s criteria in one pass</div>
+          <div class="ds">Runs straddle, strangle, spread and trend checks together — the single place to see all live candidates.</div>
+          <div class="ft"><span>View all signals</span><span class="open">Open</span></div>
+        </div>
+        <div class="strat">
+          <div class="top">
+            <span class="fam" style="background:#173324;color:#3DD68C">STRADDLE</span>
+            <div class="cnt"><div class="l">MATCHES</div><div class="v mono">3</div></div>
+          </div>
+          <div class="tl">Neutral premium harvesting</div>
+          <div class="ds">Short straddles on range-bound names with rich IV and no scheduled events.</div>
+          <div class="ft"><span>View all signals</span><span class="open">Open</span></div>
+        </div>
+        <div class="strat">
+          <div class="top">
+            <span class="fam" style="background:#2E2410;color:#F0B429">INCOME SPREADS</span>
+            <div class="cnt"><div class="l">MATCHES</div><div class="v mono">5</div></div>
+          </div>
+          <div class="tl">Defined-risk credit spreads</div>
+          <div class="ds">Bull-put / bear-call spreads with ≥65% POP and credit/max-loss ≥ 0.33.</div>
+          <div class="ft"><span>View all signals</span><span class="open">Open</span></div>
+        </div>
+        <div class="strat">
+          <div class="top">
+            <span class="fam" style="background:#2E1414;color:#F85149">ADX DIRECTION</span>
+            <div class="cnt"><div class="l">MATCHES</div><div class="v mono">2</div></div>
+          </div>
+          <div class="tl">Trend-continuation engine</div>
+          <div class="ds">ADX > 25 with expanding directional index — flags trending underlyings for directional trades.</div>
+          <div class="ft"><span>View all signals</span><span class="open">Open</span></div>
+        </div>
+        <div class="strat">
+          <div class="top">
+            <span class="fam" style="background:#173324;color:#3DD68C">STRANGLE</span>
+            <div class="cnt"><div class="l">MATCHES</div><div class="v mono">1</div></div>
+          </div>
+          <div class="tl">Wider-range premium selling</div>
+          <div class="ds">Short strangles when IV is rich but the range is wider than a straddle tolerates.</div>
+          <div class="ft"><span>View all signals</span><span class="open">Open</span></div>
+        </div>
+        <div class="strat">
+          <div class="top">
+            <span class="fam" style="background:#1B2129;color:#8B96A5">MCX COMMODITY</span>
+            <div class="cnt"><div class="l">MATCHES</div><div class="v mono" style="color:#8B96A5">0</div></div>
+          </div>
+          <div class="tl">Commodity regime engine</div>
+          <div class="ds">Gold/silver/crude regime detection — planned, in development.</div>
+          <div class="ft"><span>Strategy in development</span><span class="open">Open</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ RIGHT RAIL: fixed 380px, context always visible ══ -->
+    <div class="rail">
+
+      <!-- Market pulse -->
+      <div class="card pulse">
+        <div class="card-hd">
+          <span class="t">MARKET PULSE</span>
+          <span class="n">session context</span>
+        </div>
+        <div class="tiles">
+          <div class="tile"><div class="l">NIFTY SPOT</div><div class="v mono t-plain">25,214.50</div></div>
+          <div class="tile"><div class="l">DAY CHANGE</div><div class="v mono t-green">+0.34%</div></div>
+          <div class="tile"><div class="l">MARGIN</div><div class="v mono t-plain">₹4.12L</div></div>
+          <div class="tile"><div class="l">OI PCR</div><div class="v mono t-green">1.12</div></div>
+          <div class="tile"><div class="l">VOL PCR</div><div class="v mono t-plain">0.87</div></div>
+          <div class="tile"><div class="l">ATM IV</div><div class="v mono t-amber">12.4%</div></div>
+        </div>
+      </div>
+
+      <!-- Breadth -->
+      <div class="card breadth">
+        <div class="card-hd">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="t">MARKET BREADTH</span>
+            <span class="badge b-green">BULLISH</span>
+          </div>
+          <a class="link" href="#">Open Breadth →</a>
+        </div>
+        <div class="tiles">
+          <div class="tile"><div class="l">ADVANCERS</div><div class="v mono t-green">148</div></div>
+          <div class="tile"><div class="l">DECLINERS</div><div class="v mono t-red">92</div></div>
+          <div class="tile"><div class="l">NET</div><div class="v mono t-green">+56</div></div>
+          <div class="tile"><div class="l">A/D RATIO</div><div class="v mono t-plain">1.61</div></div>
+          <div class="tile"><div class="l">% &gt; 20-DMA</div><div class="v mono t-green">61%</div></div>
+          <div class="tile"><div class="l">% &gt; 50-DMA</div><div class="v mono t-amber">54%</div></div>
+        </div>
+        <div class="foot"><span>Participation improving · 240 symbols</span><span>as of Oct 17</span></div>
+      </div>
+
+      <!-- Decision parameters -->
+      <div class="card">
+        <div class="card-hd">
+          <span class="t">DECISION PARAMETERS</span>
+          <span class="n">baseline ranges</span>
+        </div>
+        <div class="rules">
+          <div class="rule"><span class="k">IV Rank</span><span class="v mono">≥ 40%</span><span class="sw" style="background:#3DD68C"></span></div>
+          <div class="rule"><span class="k">POP</span><span class="v mono">≥ 65%</span><span class="sw" style="background:#3DD68C"></span></div>
+          <div class="rule"><span class="k">Short Δ</span><span class="v mono">0.15–0.30</span><span class="sw" style="background:#5B9BD5"></span></div>
+          <div class="rule"><span class="k">DTE</span><span class="v mono">7–45 d</span><span class="sw" style="background:#5B9BD5"></span></div>
+          <div class="rule"><span class="k">Credit/Max Loss</span><span class="v mono">≥ 0.33</span><span class="sw" style="background:#F0B429"></span></div>
+          <div class="rule"><span class="k">RSI(14)</span><span class="v mono">40–60</span><span class="sw" style="background:#F0B429"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mock-note">OPTION A MOCKUP · SAMPLE DATA · full-width — resize window to see it adapt</div>
+</body>
+</html>

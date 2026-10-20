@@ -33,3 +33,10 @@ evals/reports/
 # str-stra prototype — keep scripts/docs, ignore generated scan output
 str-stra/*.json
 str-stra/*.png
+
+# Local agent/tool state
+.hermes/
+
+# Saved external reference pages (chartink/tipsheet screenshots of live sites)
+/chartink_dash.html
+/tipsheet*.html
