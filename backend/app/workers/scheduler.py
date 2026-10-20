@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -9,6 +10,7 @@ from app.workers.breadth_loop import run_breadth_job
 from app.workers.daily_byte_loop import run_daily_byte_job
 from app.workers.screener_loop import run_screener_job
 from app.workers.str_stra_loop import run_str_stra_job
+from app.workers.telegram_calls_loop import run_sync_job, run_tracking_job
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,27 @@ def start_scheduler() -> None:
         next_run_time=None,  # first run triggered explicitly at startup, see main.py
     )
     scheduler.add_job(
+        run_sync_job,
+        "interval",
+        minutes=settings.telegram_call_sync_interval_minutes,
+        id="telegram_call_sync",
+        max_instances=1,
+        coalesce=True,
+        # Do one incremental pass shortly after boot, then every N minutes.
+        # Without this a process that is restarted before the first interval
+        # never syncs at all, leaving the tracker stuck on its old data.
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),
+    )
+    scheduler.add_job(
+        run_tracking_job,
+        "interval",
+        minutes=settings.telegram_call_track_interval_minutes,
+        id="telegram_call_track",
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=90),
+    )
+    scheduler.add_job(
         run_daily_byte_job,
         CronTrigger(
             hour=settings.telegram_daily_byte_hour,
@@ -82,13 +105,16 @@ def start_scheduler() -> None:
     scheduler.start()
     logger.info(
         "Scheduler started: screener every %s min, str-stra every %s min, breadth every %s min, "
-        "daily-byte at %02d:%02d %s, Definedge re-auth every %s min",
+        "daily-byte at %02d:%02d %s, trade-call sync every %s min, trade-call track every %s min, "
+        "Definedge re-auth every %s min",
         settings.screener_interval_minutes,
         settings.str_stra_interval_minutes,
         settings.breadth_interval_minutes,
         settings.telegram_daily_byte_hour,
         settings.telegram_daily_byte_minute,
         settings.telegram_daily_byte_timezone,
+        settings.telegram_call_sync_interval_minutes,
+        settings.telegram_call_track_interval_minutes,
         DEFINEDGE_REAUTH_INTERVAL_MINUTES,
     )
 

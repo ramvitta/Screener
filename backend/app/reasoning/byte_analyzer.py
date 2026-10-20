@@ -32,6 +32,10 @@ from app.reasoning.client import chat_completion
 
 logger = logging.getLogger(__name__)
 
+# Cap concurrent LLM calls so the heavier reasoning model isn't hammered with
+# the whole batch at once (which otherwise rate-limits / times out).
+_MAX_CONCURRENCY = 4
+
 _NUMBER = re.compile(r"(?<![\w.])-?\d[\d,]*(?:\.\d+)?")
 _TICKER = re.compile(r"(?<![A-Z0-9])(?:\\$)?([A-Z]{3,})(?![A-Z0-9])")
 
@@ -114,74 +118,103 @@ def _regex_fallback(text: str) -> DailyByteAnalysis:
 
 
 async def _extract(text: str, model: str) -> Tuple[Optional[DailyByteAnalysis], bool]:
-    try:
-        raw = await chat_completion(
-            [{"role": "system", "content": EXTRACTION_SYSTEM}, {"role": "user", "content": text}],
-            model,
-            max_tokens=3000,
-            json_mode=True,
-        )
-    except httpx.HTTPError as exc:
-        logger.warning("daily-byte: extraction API error (%s) — falling back", type(exc).__name__)
-        return None, False
-    if not raw:
-        return None, False
-    try:
-        obj = json.loads(_strip_fences(raw))
-    except ValueError:
-        return None, False
-    if not isinstance(obj, dict):
-        return None, False
-    try:
-        analysis = DailyByteAnalysis.model_validate(obj)
-    except Exception as exc:  # noqa: BLE001 — model output is untrusted
-        logger.warning("daily-byte: extraction failed schema validation (%s)", type(exc).__name__)
-        return None, False
-    bad = _first_unfaithful(analysis.model_dump(), _numbers_in_text(text))
-    if bad is not None:
-        logger.warning("daily-byte: extracted a number not in the source (%s) — marking invalid", bad)
-        return analysis, False
-    return analysis, True
+    # The reasoning model is non-deterministic, so a single call can occasionally
+    # return JSON that fails schema validation. Retry parse/schema failures a
+    # couple of times before falling back — transport errors still abort fast.
+    attempts = 2
+    for attempt in range(attempts):
+        try:
+            raw = await chat_completion(
+                [{"role": "system", "content": EXTRACTION_SYSTEM}, {"role": "user", "content": text}],
+                model,
+                max_tokens=3000,
+                json_mode=True,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("daily-byte: extraction API error (%s) — falling back", type(exc).__name__)
+            return None, False
+        if not raw:
+            # The reasoning model occasionally burns its whole budget on chain-of-
+            # thought and returns empty content — retry rather than fall back.
+            if attempt < attempts - 1:
+                logger.warning("daily-byte: empty extraction response — retrying (%d/%d)", attempt + 1, attempts)
+                continue
+            return None, False
+        try:
+            obj = json.loads(_strip_fences(raw))
+        except ValueError:
+            if attempt < attempts - 1:
+                continue
+            return None, False
+        if not isinstance(obj, dict):
+            if attempt < attempts - 1:
+                continue
+            return None, False
+        try:
+            analysis = DailyByteAnalysis.model_validate(obj)
+        except Exception as exc:  # noqa: BLE001 — model output is untrusted
+            if attempt < attempts - 1:
+                logger.warning("daily-byte: extraction failed schema validation (%s) — retrying", type(exc).__name__)
+                continue
+            logger.warning("daily-byte: extraction failed schema validation (%s) — falling back", type(exc).__name__)
+            return None, False
+        bad = _first_unfaithful(analysis.model_dump(), _numbers_in_text(text))
+        if bad is not None:
+            logger.warning("daily-byte: extracted a number not in the source (%s) — marking invalid", bad)
+            return analysis, False
+        return analysis, True
+    return None, False
 
 
 async def _summarize(text: str, model: str) -> Optional[str]:
-    try:
-        summary = await chat_completion(
-            [{"role": "system", "content": SUMMARY_SYSTEM}, {"role": "user", "content": text}],
-            model,
-            max_tokens=1000,
-        )
-    except httpx.HTTPError as exc:
-        logger.warning("daily-byte: summary API error (%s) — skipping", type(exc).__name__)
-        return None
-    if not summary or len(summary) > 700:
-        return None
-    return summary
+    attempts = 2
+    for attempt in range(attempts):
+        try:
+            summary = await chat_completion(
+                [{"role": "system", "content": SUMMARY_SYSTEM}, {"role": "user", "content": text}],
+                model,
+                max_tokens=1000,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("daily-byte: summary API error (%s) — skipping", type(exc).__name__)
+            return None
+        if summary and len(summary) <= 700:
+            return summary
+        if attempt < attempts - 1:
+            continue
+    return None
 
 
-async def analyze_message(text: str, model: str) -> Tuple[DailyByteAnalysis, Optional[str], bool]:
+async def analyze_message(text: str, extract_model: str, summary_model: str) -> Tuple[DailyByteAnalysis, Optional[str], bool]:
     """Analyses one message → (analysis, summary, is_valid). is_valid is False
     whenever the extraction could not be structurally validated or contained
-    a fabricated number; summary is independent display text."""
+    a fabricated number; summary is independent display text. Extraction uses
+    the faster extract_model (reliable JSON), summary the deeper summary_model."""
     enabled = settings.llm_byte_enabled and settings.llm_api_key
     if enabled:
         register_secret(settings.llm_api_key)
     analysis: Optional[DailyByteAnalysis] = None
     is_valid = False
     if enabled:
-        analysis, is_valid = await _extract(text, model)
+        analysis, is_valid = await _extract(text, extract_model)
     summary: Optional[str] = None
     if enabled:
-        summary = await _summarize(text, model)
+        summary = await _summarize(text, summary_model)
     if analysis is None:
         analysis = _regex_fallback(text)
     return analysis, summary, is_valid
 
 
-async def analyze_messages(texts: List[str], model: str) -> List[Tuple[DailyByteAnalysis, Optional[str], bool]]:
-    """Batch over up to llm_byte_max_messages texts."""
+async def analyze_messages(texts: List[str], extract_model: str, summary_model: str) -> List[Tuple[DailyByteAnalysis, Optional[str], bool]]:
+    """Batch over up to llm_byte_max_messages texts, with bounded concurrency."""
     head = texts[: settings.llm_byte_max_messages]
-    return await asyncio.gather(*(analyze_message(t, model) for t in head))
+    sem = asyncio.Semaphore(_MAX_CONCURRENCY)
+
+    async def one(t: str) -> Tuple[DailyByteAnalysis, Optional[str], bool]:
+        async with sem:
+            return await analyze_message(t, extract_model, summary_model)
+
+    return await asyncio.gather(*(one(t) for t in head))
 
 
 def synthesize_digest(results: List[dict]) -> dict:

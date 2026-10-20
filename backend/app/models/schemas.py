@@ -430,6 +430,10 @@ class SignalHistoryItem(BaseModel):
     expiry: Optional[date] = None
     status: str  # accepted | rejected
     reject_reason: Optional[str] = None
+    # Unified-screener tier (PRIME / READY / WATCH) pulled out of
+    # decision_json.computed so the history list can filter/colour-code
+    # without fetching every signal's full detail payload.
+    tier: Optional[str] = None
     generated_at: Optional[datetime] = None
     data_source: Optional[str] = None
     reason: Optional[str] = None
@@ -541,3 +545,229 @@ class BreadthResponse(BaseModel):
     daily: List[BreadthSnapshot] = Field(default_factory=list)
     weekly: List[BreadthSnapshot] = Field(default_factory=list)
     monthly: List[BreadthSnapshot] = Field(default_factory=list)
+
+
+# --- Telegram trade-call tracker ---
+
+TelegramMessageCategory = str  # trade_alert | trade_update | trade_closure | result_calendar | market_commentary | promo | other
+TelegramCallStatus = str  # open | target_hit | sl_hit | closed | expired
+TelegramEventType = str  # alert | target_hit | sl_hit | closed | partial_exit | trail | update
+
+
+class TelegramCallExtract(BaseModel):
+    """Untrusted structured extraction of one call. Every field is optional so
+    a partial regex/LLM extraction still parses; numbers are checked against
+    the source text before being trusted."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    symbol: Optional[str] = None
+    symbol_raw: Optional[str] = None
+    display_name: Optional[str] = None
+    segment: str = "other"
+    exchange: Optional[str] = None
+    direction: str = "neutral"
+    action: str = "BUY"
+    option_type: Optional[str] = None
+    strike: Optional[float] = None
+    expiry: Optional[str] = None
+    expiry_text: Optional[str] = None
+    entry_low: Optional[float] = None
+    entry_high: Optional[float] = None
+    entry_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    target_1: Optional[float] = None
+    target_2: Optional[float] = None
+    target_3: Optional[float] = None
+    cmp: Optional[float] = None
+    horizon: Optional[str] = None
+
+
+class TelegramEventExtract(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    event_type: str = "update"
+    symbol: Optional[str] = None
+    option_type: Optional[str] = None
+    strike: Optional[float] = None
+    expiry: Optional[str] = None
+    price: Optional[float] = None
+    target_value: Optional[float] = None
+    realized_pct: Optional[float] = None
+    note: Optional[str] = None
+
+
+class TelegramMessageExtract(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    category: str = "other"
+    confidence: Optional[float] = None
+    summary: Optional[str] = None
+    is_trade_call: bool = False
+    calls: List[TelegramCallExtract] = Field(default_factory=list)
+    events: List[TelegramEventExtract] = Field(default_factory=list)
+
+
+class TelegramCallEvent(BaseModel):
+    id: int
+    call_id: Optional[int] = None
+    message_fk: int
+    chat_id: int
+    message_id: int
+    posted_at: datetime
+    event_type: str
+    symbol: Optional[str] = None
+    option_type: Optional[str] = None
+    strike: Optional[float] = None
+    expiry: Optional[str] = None
+    price: Optional[float] = None
+    target_value: Optional[float] = None
+    realized_pct: Optional[float] = None
+    note: Optional[str] = None
+    method: str
+    is_valid: bool = True
+    text: Optional[str] = None
+
+
+class TelegramCall(BaseModel):
+    id: int
+    message_fk: int
+    chat_id: int
+    chat_username: Optional[str] = None
+    chat_title: Optional[str] = None
+    message_id: int
+    posted_at: datetime
+    symbol: str
+    symbol_raw: Optional[str] = None
+    display_name: Optional[str] = None
+    segment: str = "other"
+    exchange: Optional[str] = None
+    direction: str
+    action: str
+    option_type: Optional[str] = None
+    strike: Optional[float] = None
+    expiry: Optional[date] = None
+    expiry_text: Optional[str] = None
+    entry_low: Optional[float] = None
+    entry_high: Optional[float] = None
+    entry_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    target_1: Optional[float] = None
+    target_2: Optional[float] = None
+    target_3: Optional[float] = None
+    cmp: Optional[float] = None
+    horizon: Optional[str] = None
+    status: str
+    status_reason: Optional[str] = None
+    status_source: Optional[str] = None
+    exit_price: Optional[float] = None
+    closed_at: Optional[datetime] = None
+    realized_pct: Optional[float] = None
+    r_multiple: Optional[float] = None
+    confidence: Optional[float] = None
+    method: str
+    is_valid: bool = True
+    tracking_status: Optional[str] = None
+    tracking_message: Optional[str] = None
+    last_checked_at: Optional[datetime] = None
+    last_price: Optional[float] = None
+    notes: Optional[str] = None
+    source_text: Optional[str] = None
+    source_url: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TelegramCallDetail(TelegramCall):
+    extraction: Optional[dict] = None
+    events: List[TelegramCallEvent] = Field(default_factory=list)
+    thread: List["TelegramArchiveMessage"] = Field(default_factory=list)
+
+
+class TelegramArchiveMessage(BaseModel):
+    id: int
+    chat_id: int
+    chat_username: Optional[str] = None
+    chat_title: Optional[str] = None
+    message_id: int
+    posted_at: datetime
+    posted_local: Optional[datetime] = None
+    sender_name: Optional[str] = None
+    sender_username: Optional[str] = None
+    text: str
+    media_type: Optional[str] = None
+    views: Optional[int] = None
+    forwards: Optional[int] = None
+    reply_to_msg_id: Optional[int] = None
+    category: Optional[str] = None
+    method: Optional[str] = None
+    confidence: Optional[float] = None
+    call_count: int = 0
+
+
+class TelegramChatSummary(BaseModel):
+    chat_id: int
+    username: Optional[str] = None
+    title: Optional[str] = None
+    message_count: int
+    first_message_at: Optional[datetime] = None
+    last_message_at: Optional[datetime] = None
+    call_count: int = 0
+    open_count: int = 0
+    target_hit_count: int = 0
+    sl_hit_count: int = 0
+    closed_count: int = 0
+
+
+class TelegramCallStats(BaseModel):
+    total_calls: int = 0
+    open: int = 0
+    target_hit: int = 0
+    sl_hit: int = 0
+    closed: int = 0
+    expired: int = 0
+    win_rate: Optional[float] = None
+    avg_realized_pct: Optional[float] = None
+    tracked: int = 0
+    unresolved: int = 0
+    total_messages: int = 0
+    classified_messages: int = 0
+    last_sync_at: Optional[datetime] = None
+
+
+class TelegramSyncStatus(BaseModel):
+    state: str  # idle | running | ok | degraded | error
+    message: str = ""
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    since: Optional[date] = None
+    max_per_chat: int = 0
+    messages_stored: int = 0
+    calls_found: int = 0
+    chats_done: int = 0
+    chats_total: int = 0
+    error: Optional[str] = None
+
+
+class TelegramSyncRequest(StrictModel):
+    since: Optional[date] = None
+    max_per_chat: Optional[int] = Field(default=None, ge=0, le=500_000)
+    full: bool = False
+    classify: bool = True
+    use_llm: bool = False
+
+
+class TelegramClassifyRequest(StrictModel):
+    limit: int = Field(default=100, ge=1, le=5000)
+    use_llm: bool = False
+    only_unclassified: bool = True
+
+
+class TelegramCloseRequest(StrictModel):
+    exit_price: PositivePrice
+    closed_at: Optional[datetime] = None
+    notes: Optional[Notes] = None
+
+
+# Resolve the forward reference in TelegramCallDetail.
+TelegramCallDetail.model_rebuild()

@@ -288,9 +288,116 @@ CREATE TABLE IF NOT EXISTS daily_byte_digests (
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(date)
 );
+
+-- One classification per Telegram message. Kept separate from the raw
+-- archive so a message is classified exactly once per (re)run and the
+-- category/structured extraction is queryable without parsing text.
+CREATE TABLE IF NOT EXISTS telegram_message_classifications (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_fk      INTEGER NOT NULL UNIQUE REFERENCES daily_byte_messages(id) ON DELETE CASCADE,
+    category        TEXT NOT NULL CHECK (category IN ('trade_alert','trade_update','trade_closure','result_calendar','market_commentary','promo','other')),
+    method          TEXT NOT NULL,  -- regex | llm | llm+regex | none
+    confidence      REAL,
+    is_trade_call   INTEGER NOT NULL DEFAULT 0,
+    summary         TEXT,
+    extracted_json  TEXT NOT NULL,
+    is_valid        INTEGER NOT NULL DEFAULT 1,
+    classified_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tg_class_category ON telegram_message_classifications(category);
+
+-- One row per trade call (a single alert message may contain several).
+-- status tracks the call to closure via either a follow-up Telegram message
+-- (status_source='message') or market-price tracking (status_source='price').
+CREATE TABLE IF NOT EXISTS telegram_calls (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_fk      INTEGER NOT NULL REFERENCES daily_byte_messages(id) ON DELETE CASCADE,
+    chat_id         INTEGER NOT NULL,
+    chat_username   TEXT,
+    chat_title      TEXT,
+    message_id      INTEGER NOT NULL,
+    posted_at       TEXT NOT NULL,
+    call_index      INTEGER NOT NULL DEFAULT 1,
+    symbol          TEXT NOT NULL,
+    symbol_raw      TEXT,
+    display_name    TEXT,
+    segment         TEXT NOT NULL DEFAULT 'other' CHECK (segment IN ('index','index_option','index_future','equity','stock_option','stock_future','commodity','commodity_option','commodity_future','other')),
+    exchange        TEXT,
+    direction       TEXT NOT NULL CHECK (direction IN ('long','short','neutral')),
+    action          TEXT NOT NULL CHECK (action IN ('BUY','SELL')),
+    option_type     TEXT CHECK (option_type IN ('CE','PE')),
+    strike          REAL,
+    expiry          TEXT,
+    expiry_text     TEXT,
+    entry_low       REAL,
+    entry_high      REAL,
+    entry_price     REAL,
+    stop_loss       REAL,
+    target_1        REAL,
+    target_2        REAL,
+    target_3        REAL,
+    cmp             REAL,
+    horizon         TEXT,
+    status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','target_hit','sl_hit','closed','expired')),
+    status_reason   TEXT,
+    status_source   TEXT,  -- message | price | manual
+    exit_price      REAL,
+    closed_at       TEXT,
+    realized_pct    REAL,
+    r_multiple      REAL,
+    parent_call_id  INTEGER REFERENCES telegram_calls(id) ON DELETE SET NULL,
+    confidence      REAL,
+    method          TEXT NOT NULL,
+    is_valid        INTEGER NOT NULL DEFAULT 1,
+    extraction_json TEXT NOT NULL,
+    tracking_status TEXT,  -- tracked | unresolved | no_data | error | contract_expired
+    tracking_message TEXT,
+    last_checked_at TEXT,
+    last_price      REAL,
+    notes           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(message_fk, call_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tg_calls_status ON telegram_calls(status);
+CREATE INDEX IF NOT EXISTS idx_tg_calls_symbol ON telegram_calls(symbol);
+CREATE INDEX IF NOT EXISTS idx_tg_calls_chat ON telegram_calls(chat_id, posted_at);
+CREATE INDEX IF NOT EXISTS idx_tg_calls_posted ON telegram_calls(posted_at);
+
+-- Follow-up events (target hit, SL hit, booked profit, trail, manual update).
+-- call_id is nullable so an unmatched closure message is still retained for
+-- review rather than silently dropped.
+CREATE TABLE IF NOT EXISTS telegram_call_events (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    call_id         INTEGER REFERENCES telegram_calls(id) ON DELETE SET NULL,
+    message_fk      INTEGER NOT NULL REFERENCES daily_byte_messages(id) ON DELETE CASCADE,
+    chat_id         INTEGER NOT NULL,
+    message_id      INTEGER NOT NULL,
+    posted_at       TEXT NOT NULL,
+    event_index     INTEGER NOT NULL DEFAULT 1,
+    event_type      TEXT NOT NULL CHECK (event_type IN ('alert','target_hit','sl_hit','closed','partial_exit','trail','update')),
+    symbol          TEXT,
+    option_type     TEXT CHECK (option_type IN ('CE','PE')),
+    strike          REAL,
+    expiry          TEXT,
+    price           REAL,
+    target_value    REAL,
+    realized_pct    REAL,
+    note            TEXT,
+    method          TEXT NOT NULL,
+    is_valid        INTEGER NOT NULL DEFAULT 1,
+    extracted_json  TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(message_fk, event_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tg_events_call ON telegram_call_events(call_id, posted_at);
+CREATE INDEX IF NOT EXISTS idx_tg_events_message ON telegram_call_events(message_fk);
 """
 
-SCHEMA_VERSION = 5  # +breadth_snapshots / daily_byte_* (breadth + Telegram daily byte)
+SCHEMA_VERSION = 6  # +Telegram trade-call classification / calls-to-closure tracking
 
 
 def get_db_path() -> str:

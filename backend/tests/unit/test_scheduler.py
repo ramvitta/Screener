@@ -63,5 +63,14 @@ def test_start_and_stop_scheduler(monkeypatch):
     fake = FakeScheduler()
     monkeypatch.setattr(sched, "scheduler", fake)
     sched.start_scheduler()
-    assert [job_id for _, job_id in added] == ["screener_run", "definedge_reauth", "retention"]
+    assert [job_id for _, job_id in added] == [
+        "screener_run",
+        "definedge_reauth",
+        "retention",
+        "str_stra_run",
+        "breadth_run",
+        "telegram_call_sync",
+        "telegram_call_track",
+        "daily_byte_run",
+    ]
     sched.stop_scheduler()  # must not raise

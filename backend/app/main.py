@@ -9,15 +9,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import account, admin, alerts, analytics, auth, backfill, chain, charts, market, positions, screener, ws
+from app.api.routes import account, admin, alerts, analytics, auth, backfill, chain, charts, market, positions, screener, telegram_calls, ws
 from app.api.routes.auth import ensure_authenticated, purge_expired_sessions
 from app.config import settings
 from app.core.logging import new_request_id, register_settings_secrets, request_id_var, setup_logging
 from app.core.security import require_auth
 from app.db import sqlite
 from app.integrations.definedge_client import DefinedgeAuthError
-from app.workers.scheduler import start_scheduler, stop_scheduler
 from app.workers.breadth_loop import run_breadth_job
+from app.workers.daily_byte_loop import run_daily_byte_job
+from app.workers.scheduler import start_scheduler, stop_scheduler
 from app.workers.screener_loop import run_screener_job
 from app.workers.str_stra_loop import run_str_stra_job
 
@@ -65,6 +66,9 @@ async def lifespan(app: FastAPI):
     # Breadth fetches the full universe (~200 symbols) of daily candles, so kick
     # it off in the background rather than blocking startup on ~70s of history.
     asyncio.create_task(run_breadth_job())
+    # Daily byte fetches Telegram history + runs LLM analysis (a few seconds per
+    # message), so kick it off in the background too rather than blocking startup.
+    asyncio.create_task(run_daily_byte_job())
     yield
     stop_scheduler()
 
@@ -117,6 +121,7 @@ for _router in (
     alerts.router,
     backfill.router,
     admin.router,
+    telegram_calls.router,
 ):
     app.include_router(_router, dependencies=_protected)
 app.include_router(ws.router)  # authenticates itself per-connection (core/security.py)

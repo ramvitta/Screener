@@ -10,8 +10,10 @@ standalone script — scripts/telegram_login.py — because a background worker
 has no terminal to read the code from. After that, the .session file is reused.
 """
 
+import asyncio
 import json
 import logging
+import sqlite3
 from datetime import datetime
 from typing import List, Optional
 from zoneinfo import ZoneInfo
@@ -166,22 +168,36 @@ class TelegramDailyByteClient:
         """Connect and verify the session is authorized. Raises
         TelegramAuthError (with a hint to run scripts/telegram_login.py) if
         not — a background worker has no terminal to complete the phone-code
-        prompt itself."""
+        prompt itself.
+
+        The daily-byte and trade-call workers may connect at the same time.
+        Telethon's SQLite session then rejects one of them with a transient
+        ``OperationalError``; retrying with a fresh client avoids turning that
+        race into a degraded sync.
+        """
         if not (settings.telegram_api_id and settings.telegram_api_hash):
             raise TelegramAuthError("TELEGRAM_API_ID / TELEGRAM_API_HASH are not set")
-        if self._client is None:
-            self._client = self._build_client()
-        try:
-            await self._client.connect()
-        except Exception as exc:  # noqa: BLE001
-            raise TelegramAuthError(f"Telegram connect failed ({type(exc).__name__})") from exc
+        for attempt in range(5):
+            if self._client is None:
+                self._client = self._build_client()
+            try:
+                await self._client.connect()
+                break
+            except Exception as exc:  # noqa: BLE001
+                try:
+                    await self._client.disconnect()
+                except Exception as cleanup_exc:  # noqa: BLE001 — best-effort cleanup
+                    logger.debug("telegram: cleanup after connect failure failed (%s)", type(cleanup_exc).__name__)
+                self._client = None
+                locked = isinstance(exc, sqlite3.OperationalError) or "database is locked" in str(exc).lower()
+                if not locked or attempt == 4:
+                    raise TelegramAuthError(f"Telegram connect failed ({type(exc).__name__})") from exc
+                await asyncio.sleep(1.0 + attempt)
         if not await self._client.is_user_authorized():
             raise TelegramAuthError("Telegram session not authorized — run `python scripts/telegram_login.py` once")
 
     async def interactive_login(self) -> dict:
         """One-time interactive login (phone code via stdin) for the CLI script."""
-        from telethon import TelegramClient
-
         if not (settings.telegram_api_id and settings.telegram_api_hash):
             raise TelegramAuthError("TELEGRAM_API_ID / TELEGRAM_API_HASH are not set")
         if self._client is None:
@@ -231,3 +247,38 @@ class TelegramDailyByteClient:
         if self._client is not None:
             await self._client.disconnect()
             self._client = None
+
+    async def fetch_history(
+        self, chat: dict, limit: int = 0, batch_size: int = 200, min_id: int = 0
+    ) -> List[dict]:
+        """Paginate backwards through a chat's history (newest first).
+
+        `limit=0` means all available messages. When `min_id` is set, Telethon
+        returns only messages newer than that message id, which is what makes
+        a refresh incremental: the previous sync's newest id is the lower
+        bound, so there is no gap between runs and no full re-download. Messages
+        are normalised exactly like the daily byte so both features share
+        `daily_byte_messages` and its dedupe guarantee.
+        """
+        await self.ensure_session()
+        entity = await self._client.get_entity(chat["ref"])
+        out: List[dict] = []
+        offset_id = 0
+        while True:
+            want = batch_size if not limit else min(batch_size, limit - len(out))
+            if want <= 0:
+                break
+            messages = await self._client.get_messages(
+                entity, limit=want, offset_id=offset_id, min_id=min_id
+            )
+            messages = [m for m in messages if m is not None]
+            if not messages:
+                break
+            for msg in messages:
+                out.append(
+                    _normalise_message(msg, chat["group_slot"], chat["chat_id"], chat["username"], chat["title"])
+                )
+            offset_id = messages[-1].id
+            if len(messages) < want:
+                break
+        return out

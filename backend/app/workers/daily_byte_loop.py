@@ -12,7 +12,7 @@ found, it records status and stores nothing — never fabricates content.
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from app.config import settings
@@ -22,7 +22,7 @@ from app.reasoning.byte_analyzer import analyze_messages, synthesize_digest
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_VERSION = "v2"
+ANALYSIS_VERSION = "v5"
 
 _status: dict = {"state": "starting", "message": "daily-byte has not run yet", "last_run": None}
 
@@ -41,6 +41,13 @@ def _chats() -> List[str]:
 
 def _model() -> str:
     return settings.llm_byte_model or settings.llm_reason_model
+
+
+def _extract_model() -> str:
+    """Fast/flash model for the structured extraction pass. The heavier
+    reasoning model can spend its whole token budget on chain-of-thought and
+    return empty JSON content, so parsing prefers the lighter model."""
+    return settings.llm_byte_extract_model or _model()
 
 
 def _insert_message(conn, m: dict) -> Optional[int]:
@@ -68,12 +75,25 @@ def _insert_message(conn, m: dict) -> Optional[int]:
 
 
 def _insert_analysis(conn, message_fk: int, analysis, summary: Optional[str], is_valid: bool, model: str) -> None:
+    # Upsert: a later run (e.g. one where the LLM was reachable) should replace
+    # an earlier failed/regex-fallback analysis for the same message+version,
+    # so the digest and the stored analyses can never drift apart.
     conn.execute(
         """
-        INSERT OR IGNORE INTO daily_byte_analyses
+        INSERT INTO daily_byte_analyses
         (message_fk, analysis_version, model, extracted_json, summary, sentiment, symbols_json, events_json,
          confidence, is_valid, analyzed_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(message_fk, analysis_version) DO UPDATE SET
+            model = excluded.model,
+            extracted_json = excluded.extracted_json,
+            summary = excluded.summary,
+            sentiment = excluded.sentiment,
+            symbols_json = excluded.symbols_json,
+            events_json = excluded.events_json,
+            confidence = excluded.confidence,
+            is_valid = excluded.is_valid,
+            analyzed_at = excluded.analyzed_at
         """,
         (
             message_fk,
@@ -139,6 +159,7 @@ async def run_daily_byte_job() -> None:
     lookback = timedelta(hours=settings.telegram_history_lookback_hours)
     since = datetime.now(timezone.utc) - lookback
     model = _model()
+    extract_model = _extract_model()
 
     client = TelegramDailyByteClient()
     try:
@@ -165,15 +186,25 @@ async def run_daily_byte_job() -> None:
         for m in messages:
             pairs.append((_insert_message(conn, m), m))
 
-    text_pairs = [(fid, m) for fid, m in pairs if m["text"]][: settings.llm_byte_max_messages]
+    text_pairs: List[tuple] = []
+    # Select the latest `telegram_per_chat_limit` text messages from *each*
+    # group (fetch is newest-first) so every channel contributes, then apply
+    # the global cost cap.
+    by_group: Dict[int, List[tuple]] = {}
+    for fid, m in pairs:
+        if m["text"]:
+            by_group.setdefault(m["group_slot"], []).append((fid, m))
+    for slot in sorted(by_group):
+        text_pairs.extend(by_group[slot][: settings.telegram_per_chat_limit])
+    text_pairs = text_pairs[: settings.llm_byte_max_messages]
     texts = [m["text"] for _, m in text_pairs]
-    results = await analyze_messages(texts, model)  # length == len(text_pairs)
+    results = await analyze_messages(texts, extract_model, model)  # length == len(text_pairs)
 
     with get_conn() as conn:
         for (fid, _m), (analysis, summary, is_valid) in zip(text_pairs, results, strict=True):
             if fid is None:
                 continue
-            _insert_analysis(conn, fid, analysis, summary, is_valid, model)
+            _insert_analysis(conn, fid, analysis, summary, is_valid, extract_model)
 
         digest = synthesize_digest(
             [{"analysis": a, "summary": s, "is_valid": v} for (a, s, v) in results]

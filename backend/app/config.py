@@ -21,7 +21,12 @@ class Settings(BaseSettings):
     nifty_moneyness_band_pct: float = 15.0
     screener_interval_minutes: int = 5
 
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:3001"]
+    cors_origins: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ]
 
     # --- Security guardrails ---
     # Static bearer token required on every API/WebSocket call. Empty means the
@@ -112,7 +117,31 @@ class Settings(BaseSettings):
     telegram_daily_byte_minute: int = 15
     telegram_daily_byte_timezone: str = "Asia/Kolkata"
     # How far back (hours) to fetch when building each day's byte.
-    telegram_history_lookback_hours: int = 12
+    telegram_history_lookback_hours: int = 24
+    # Latest N messages analysed from *each* chat (so every channel contributes
+    # even when some are quieter than others).
+    telegram_per_chat_limit: int = 5
+
+    # --- Telegram trade-call tracker (calls page) ---
+    # Full-history archive/backfill, classification and calls-to-closure
+    # tracking. 0 max = fetch the entire available history per chat.
+    telegram_backfill_max_per_chat: int = 0
+    telegram_backfill_batch_size: int = 200
+    # Classify historical messages with the LLM during a backfill. When false
+    # the deterministic parser still runs; the UI can trigger AI classification
+    # separately (POST /api/v1/telegram/classify).
+    telegram_backfill_use_llm: bool = False
+    # Re-check open calls against Definedge candles/quotes this often.
+    telegram_call_track_interval_minutes: int = 5
+    telegram_call_track_batch: int = 25
+    # Incremental Telegram refresh (new messages only) so the calls page stays
+    # current without a manual click. Full-history repairs remain manual.
+    telegram_call_sync_interval_minutes: int = 10
+    # LLM extraction for trade calls. Reuses llm_api_key/llm_api_base_url and
+    # falls back to regex extraction whenever the LLM is disabled/unreachable.
+    llm_calls_enabled: bool = True
+    llm_calls_model: str = ""  # empty falls back to llm_byte_extract_model
+    llm_calls_max_messages: int = 40
 
     # --- Daily byte LLM analysis (reuses llm_api_key/llm_api_base_url) ---
     # Structured extraction of the market entities in each daily-byte message,
@@ -121,6 +150,11 @@ class Settings(BaseSettings):
     llm_byte_enabled: bool = False
     # Empty falls back to llm_reason_model.
     llm_byte_model: str = ""
+    # Model used for the structured JSON extraction pass only. The heavier
+    # reasoning model can burn its whole token budget on chain-of-thought and
+    # return empty content, so a fast/flash model is more reliable for parsing.
+    # Empty falls back to llm_byte_model.
+    llm_byte_extract_model: str = ""
     # Cost cap: max messages analysed per daily-byte run.
     llm_byte_max_messages: int = 20
 
