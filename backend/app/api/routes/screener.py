@@ -85,6 +85,21 @@ def _run_model(r) -> ScreenerRun:
     )
 
 
+def _tier_of(r) -> str | None:
+    """The unified-screener tier (PRIME/READY/WATCH) stored inside
+    decision_json.computed. Defensive about legacy/seed rows whose
+    decision_json may be empty or malformed."""
+    raw = r["decision_json"] if "decision_json" in r.keys() else None
+    if not raw:
+        return None
+    try:
+        computed = (json.loads(raw) or {}).get("computed") or {}
+    except (TypeError, ValueError):
+        return None
+    tier = computed.get("tier") if isinstance(computed, dict) else None
+    return tier if isinstance(tier, str) and tier else None
+
+
 def _signal_model(r, detail: bool = False):
     base = {
         "id": r["id"],
@@ -95,6 +110,7 @@ def _signal_model(r, detail: bool = False):
         "expiry": r["expiry"],
         "status": r["status"],
         "reject_reason": r["reject_reason"],
+        "tier": _tier_of(r),
         "generated_at": r["generated_at"],
         "data_source": r["data_source"],
         "reason": r["reason"],
@@ -130,10 +146,17 @@ def get_run(run_id: str):
 
 
 @router.get("/history", response_model=List[SignalHistoryItem])
-def list_history(limit: int = 100, offset: int = 0, status: str = None, strategy_type: str = None, symbol: str = None):
+def list_history(
+    limit: int = 100,
+    offset: int = 0,
+    status: str = None,
+    strategy_type: str = None,
+    symbol: str = None,
+    tier: str = None,
+    latest_only: bool = False,
+):
     limit = max(1, min(limit, 500))
     offset = max(0, offset)
-    query = "SELECT * FROM screener_signals"
     clauses = []
     args = []
     if status:
@@ -145,10 +168,29 @@ def list_history(limit: int = 100, offset: int = 0, status: str = None, strategy
     if symbol:
         clauses.append("symbol = ?")
         args.append(symbol.upper())
-    if clauses:
-        query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY id DESC LIMIT ? OFFSET ?"
-    args += [limit, offset]
+    if tier:
+        # Unified-screener tier lives inside decision_json.computed.tier.
+        clauses.append("json_extract(decision_json, '$.computed.tier') = ?")
+        args.append(tier.upper())
+
+    if latest_only:
+        # The str-stra loop emits a fresh row for every run, so a symbol that
+        # keeps qualifying would otherwise repeat once per run. Collapse the
+        # list to the newest row per strategy/symbol, while leaving the run
+        # drill-down (/runs/{run_id}) as the full historical record.
+        subquery = "SELECT MAX(id) AS id FROM screener_signals"
+        if clauses:
+            subquery += " WHERE " + " AND ".join(clauses)
+        subquery += " GROUP BY strategy_type, symbol"
+        query = f"SELECT * FROM screener_signals WHERE id IN ({subquery}) ORDER BY id DESC LIMIT ? OFFSET ?"
+        args += [limit, offset]
+    else:
+        query = "SELECT * FROM screener_signals"
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY id DESC LIMIT ? OFFSET ?"
+        args += [limit, offset]
+
     with get_conn() as conn:
         rows = conn.execute(query, args).fetchall()
     return [_signal_model(r) for r in rows]

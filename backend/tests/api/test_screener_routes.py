@@ -116,6 +116,51 @@ def test_list_history_with_filters(client, auth):
     assert len(r.json()) == 1 and r.json()[0]["symbol"] == "NIFTY"
 
 
+def test_list_history_latest_only_collapses_repeated_runs(client, auth):
+    with get_conn() as conn:
+        _seed_run(conn, run_id="r1")
+        _seed_run(conn, run_id="r2")
+        _seed_signal(conn, run_id="r1", signal_id="s1", strategy_type="straddle", symbol="HDFCAMC")
+        _seed_signal(conn, run_id="r2", signal_id="s2", strategy_type="straddle", symbol="HDFCAMC")
+        _seed_signal(conn, run_id="r2", signal_id="s3", strategy_type="straddle", symbol="NTPC")
+        _seed_signal(conn, run_id="r2", signal_id="s4", strategy_type="unified", symbol="HDFCAMC")
+
+    r = client.get("/api/v1/screener/history", headers=auth)
+    assert [row["signal_id"] for row in r.json()] == ["s4", "s3", "s2", "s1"]
+
+    r = client.get("/api/v1/screener/history", headers=auth, params={"latest_only": "true"})
+    assert [row["signal_id"] for row in r.json()] == ["s4", "s3", "s2"]
+
+    r = client.get(
+        "/api/v1/screener/history",
+        headers=auth,
+        params={"strategy_type": "straddle", "latest_only": "true"},
+    )
+    assert [row["signal_id"] for row in r.json()] == ["s3", "s2"]
+
+
+def test_list_history_exposes_and_filters_tier(client, auth):
+    prime = json.dumps({"params": {}, "computed": {"tier": "PRIME", "n_pass": 3}, "reject_reason": None})
+    watch = json.dumps({"params": {}, "computed": {"tier": "WATCH", "n_pass": 1}, "reject_reason": None})
+    with get_conn() as conn:
+        _seed_run(conn, run_id="r1")
+        _seed_signal(conn, run_id="r1", signal_id="p1", strategy_type="unified", symbol="ABB", decision_json=prime)
+        _seed_signal(conn, run_id="r1", signal_id="w1", strategy_type="unified", symbol="TCS", decision_json=watch)
+    r = client.get("/api/v1/screener/history", headers=auth)
+    tiers = {row["signal_id"]: row["tier"] for row in r.json()}
+    assert tiers == {"p1": "PRIME", "w1": "WATCH"}
+    r = client.get("/api/v1/screener/history", headers=auth, params={"tier": "prime"})
+    assert [row["signal_id"] for row in r.json()] == ["p1"]
+
+
+def test_list_history_tier_null_for_plain_signals(client, auth):
+    with get_conn() as conn:
+        _seed_run(conn, run_id="r1")
+        _seed_signal(conn, run_id="r1", signal_id="s1", strategy_type="bull_put_spread", symbol="NIFTY")
+    r = client.get("/api/v1/screener/history", headers=auth)
+    assert r.json()[0]["tier"] is None
+
+
 def test_get_history_found_and_404(client, auth):
     with get_conn() as conn:
         _seed_run(conn, run_id="r1")

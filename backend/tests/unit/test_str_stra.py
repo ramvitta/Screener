@@ -19,10 +19,13 @@ from app.screener.str_stra import (
 def _candles(closes, opens=None, highs=None, lows=None, volumes=None):
     n = len(closes)
     opens = opens or [c for c in closes]
-    highs = highs or [max(c, o) + 1 for c, o in zip(closes, opens)]
-    lows = lows or [min(c, o) - 1 for c, o in zip(closes, opens)]
+    highs = highs or [max(c, o) + 1 for c, o in zip(closes, opens, strict=False)]
+    lows = lows or [min(c, o) - 1 for c, o in zip(closes, opens, strict=False)]
     volumes = volumes or [1000.0] * n
-    return [{"open": o, "high": h, "low": l, "close": c, "volume": v} for o, h, l, c, v in zip(opens, highs, lows, closes, volumes)]
+    return [
+        {"open": o, "high": h, "low": low, "close": c, "volume": v}
+        for o, h, low, c, v in zip(opens, highs, lows, closes, volumes, strict=False)
+    ]
 
 
 def test_wilder_seeds_with_mean_and_smooths():
@@ -61,7 +64,7 @@ def test_candle_inaction_when_supply_on_low_volume():
     opens[-1] = 101.0
     closes[-1] = 99.0
     volumes[-1] = 500.0
-    c = candle_indicators(opens, [max(o, c) + 1 for o, c in zip(opens, closes)], [min(o, c) - 1 for o, c in zip(opens, closes)], closes, volumes)
+    c = candle_indicators(opens, [max(o, c) + 1 for o, c in zip(opens, closes, strict=False)], [min(o, c) - 1 for o, c in zip(opens, closes, strict=False)], closes, volumes)
     assert c["candle_type"] == "Supply"
     assert c["comment"] == "Inaction"
     assert c["volume_pct"] < 0

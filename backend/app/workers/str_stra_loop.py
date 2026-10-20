@@ -23,9 +23,9 @@ from typing import List, Optional
 from app.config import settings
 from app.db.sqlite import get_conn
 from app.screener.str_stra import (
-    AVG_PERIOD,
     ADX_PERIOD,
     ADX_TREND_WINDOW,
+    AVG_PERIOD,
     WATCHLIST,
     snap,
     straddle_metrics,
