@@ -116,7 +116,7 @@ export default function SignalHistoryPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-6">
+    <div className="px-6 py-6">
       <Link href="/" className="mb-3 inline-flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11px] font-semibold text-[#8B96A5] hover:text-[#C7CDD6]" style={{ borderColor: "#232C36" }}>
         ← Dashboard
       </Link>

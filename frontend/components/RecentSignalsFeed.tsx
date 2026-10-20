@@ -15,8 +15,10 @@ function accentFor(type: SignalHistoryItem["strategy_type"]): string {
 }
 
 /** Unified recent-signal feed: the latest accepted signals across every
- * strategy family, each linking to the chartable signal-detail view. */
-export default function RecentSignalsFeed() {
+ * strategy family, each linking to the chartable signal-detail view.
+ * `className` lets the host (home page) make it fill leftover height so the
+ * list scrolls internally instead of growing the page. */
+export default function RecentSignalsFeed({ className = "" }: { className?: string }) {
   const [signals, setSignals] = useState<SignalHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,8 +44,11 @@ export default function RecentSignalsFeed() {
   }, []);
 
   return (
-    <div className="rounded-[10px] border" style={{ background: "#12161C", borderColor: "#1F2630" }}>
-      <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "#1F2630" }}>
+    <div
+      className={`flex flex-col overflow-hidden rounded-[10px] border ${className}`}
+      style={{ background: "#12161C", borderColor: "#1F2630" }}
+    >
+      <div className="flex shrink-0 items-center justify-between border-b px-4 py-3" style={{ borderColor: "#1F2630" }}>
         <div className="text-xs font-semibold text-[#C7CDD6]">RECENT SIGNALS</div>
         <Link href="/history" className="text-[11px] text-[#5B9BD5]">
           View all →
@@ -59,7 +64,7 @@ export default function RecentSignalsFeed() {
       )}
 
       {!error && signals.length > 0 && (
-        <div className="divide-y" style={{ borderColor: "#1A2028" }}>
+        <div className="flex-1 divide-y overflow-y-auto" style={{ borderColor: "#1A2028" }}>
           {signals.map((s) => {
             const accent = accentFor(s.strategy_type);
             return (

@@ -106,7 +106,7 @@ export default function DailyByteView() {
     <div className="flex h-screen flex-col overflow-hidden bg-[#0B0E11] text-[#E8EAED]">
       <AppHeader />
       <div className="min-h-0 flex-grow overflow-y-auto px-6 py-5">
-        <div className="mx-auto flex max-w-[1200px] flex-col gap-5">
+        <div className="flex flex-col gap-5">
           <div className="flex items-end justify-between">
             <div>
               <h1 className="text-xl font-semibold">Daily Byte</h1>

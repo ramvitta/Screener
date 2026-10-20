@@ -18,10 +18,23 @@ function StatTile({ label, value, tone }: { label: string; value: string; tone?:
   const color = tone === "green" ? "#3DD68C" : tone === "red" ? "#F85149" : tone === "amber" ? "#F0B429" : "#E8EAED";
   return (
     <div className="rounded-[9px] border p-2.5" style={{ background: "#0E1116", borderColor: "#1A2028" }}>
-      <div className="text-[9.5px] text-[#8B96A5]">{label}</div>
-      <div className="mono text-base font-bold" style={{ color }}>
+      <div className="truncate text-[9.5px] text-[#8B96A5]">{label}</div>
+      <div className="mono truncate text-[15px] font-bold" style={{ color }}>
         {value}
       </div>
+    </div>
+  );
+}
+
+/** Header row for the right-rail panels (Market Pulse, Breadth, etc.). */
+function PanelHeader({ title, note }: { title: string; note?: string }) {
+  return (
+    <div
+      className="flex shrink-0 items-center justify-between border-b px-3.5 py-2.5"
+      style={{ borderColor: "#1F2630" }}
+    >
+      <span className="text-[11px] font-bold tracking-[0.5px] text-[#C7CDD6]">{title}</span>
+      {note ? <span className="text-[10px] text-[#5B6675]">{note}</span> : null}
     </div>
   );
 }
@@ -39,10 +52,12 @@ function BreadthSummaryCard({
   snapshot,
   total,
   asOf,
+  compact = false,
 }: {
   snapshot: BreadthSnapshot | null;
   total?: number;
   asOf?: string | null;
+  compact?: boolean;
 }) {
   const verdict = breadthVerdict(snapshot?.metrics ?? null);
   const m = snapshot?.metrics;
@@ -64,7 +79,9 @@ function BreadthSummaryCard({
         </div>
 
         {m ? (
-          <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div
+            className={`mt-2.5 grid gap-2 ${compact ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"}`}
+          >
             <StatTile label="Advancers" value={String(m.advancers)} tone="green" />
             <StatTile label="Decliners" value={String(m.decliners)} tone="red" />
             <StatTile label="Net" value={net != null ? `${net >= 0 ? "+" : ""}${net}` : "—"} tone={net != null && net >= 0 ? "green" : net != null ? "red" : undefined} />
@@ -209,63 +226,54 @@ export default function HomeView() {
         }
       />
 
-      {/* Body */}
-      <div className="min-h-0 flex-grow overflow-y-auto px-6 py-5">
-        <div className="mx-auto flex max-w-[1200px] flex-col gap-5">
-          <MorningBrief />
+      {/* Body — full width, no max-width cap */}
+      <div className="min-h-0 flex-grow overflow-hidden px-6 py-5">
+        <div className="flex h-full min-h-0 gap-5">
+          {/* ── Main column (fluid, stretches edge-to-edge) ── */}
+          <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+            <MorningBrief />
 
-          <div>
-            <h1 className="text-xl font-semibold">Market Command Center</h1>
-            <p className="mt-1 text-sm text-[#8B96A5]">
-              The morning brief, market pulse, breadth and every strategy&apos;s live signals on one screen.
-            </p>
-          </div>
+            <SectionHeader title="Strategy Directory" note="Open a feed to drill into the live signals." />
 
-          <SectionHeader title="Market Pulse" note="Session context and option-flow parameters." />
-
-          {/* Market overview */}
-          <div className="rounded-[10px] border p-3.5" style={{ background: "#12161C", borderColor: "#1F2630" }}>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-              <StatTile label="NIFTY Spot" value={index ? index.spot.toLocaleString("en-IN") : "—"} />
-              <StatTile
-                label="Day Change"
-                value={index ? `${index.change_pct >= 0 ? "+" : ""}${index.change_pct.toFixed(2)}%` : "—"}
-                tone={index ? (index.change_pct >= 0 ? "green" : "red") : undefined}
-              />
-              <StatTile
-                label="OI PCR"
-                value={oi?.oi_pcr != null ? oi.oi_pcr.toFixed(2) : "—"}
-                tone={oi?.oi_pcr != null && oi.oi_pcr > 1 ? "green" : oi?.oi_pcr != null ? "red" : undefined}
-              />
-              <StatTile label="Vol PCR" value={oi?.vol_pcr != null ? oi.vol_pcr.toFixed(2) : "—"} />
-              <StatTile label="ATM IV" value={atmIv != null ? `${(atmIv * 100).toFixed(1)}%` : "—"} />
-              <StatTile label="Margin" value={margin !== null ? formatCurrency(margin) : "—"} />
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+              {STRATEGY_FAMILIES.map((f) => {
+                const count = f.strategyTypes.reduce((n, t) => n + (counts[t] ?? 0), 0);
+                return <StrategyCard key={f.key} family={f} count={count} />;
+              })}
             </div>
+
+            <RecentSignalsFeed className="min-h-[260px] flex-1" />
           </div>
 
-          <SectionHeader title="Breadth" note="Advance/decline and participation across the F&O universe." />
+          {/* ── Right rail (fixed width, context always visible) ── */}
+          <div className="flex w-[380px] shrink-0 flex-col gap-5 overflow-y-auto">
+            {/* Market pulse */}
+            <div className="rounded-[10px] border" style={{ background: "#12161C", borderColor: "#1F2630" }}>
+              <PanelHeader title="MARKET PULSE" note="session context" />
+              <div className="grid grid-cols-3 gap-2 p-3">
+                <StatTile label="NIFTY Spot" value={index ? index.spot.toLocaleString("en-IN") : "—"} />
+                <StatTile
+                  label="Day Change"
+                  value={index ? `${index.change_pct >= 0 ? "+" : ""}${index.change_pct.toFixed(2)}%` : "—"}
+                  tone={index ? (index.change_pct >= 0 ? "green" : "red") : undefined}
+                />
+                <StatTile
+                  label="OI PCR"
+                  value={oi?.oi_pcr != null ? oi.oi_pcr.toFixed(2) : "—"}
+                  tone={oi?.oi_pcr != null && oi.oi_pcr > 1 ? "green" : oi?.oi_pcr != null ? "red" : undefined}
+                />
+                <StatTile label="Vol PCR" value={oi?.vol_pcr != null ? oi.vol_pcr.toFixed(2) : "—"} />
+                <StatTile label="ATM IV" value={atmIv != null ? `${(atmIv * 100).toFixed(1)}%` : "—"} />
+                <StatTile label="Margin" value={margin !== null ? formatCurrency(margin) : "—"} />
+              </div>
+            </div>
 
-          <BreadthSummaryCard snapshot={latestDaily} total={breadth?.total} asOf={breadth?.as_of} />
+            {/* Breadth */}
+            <BreadthSummaryCard compact snapshot={latestDaily} total={breadth?.total} asOf={breadth?.as_of} />
 
-          <SectionHeader title="Strategy Directory" note="Open a feed to drill into the live signals." />
-
-          {/* Strategy directory */}
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-            {STRATEGY_FAMILIES.map((f) => {
-              const count = f.strategyTypes.reduce((n, t) => n + (counts[t] ?? 0), 0);
-              return <StrategyCard key={f.key} family={f} count={count} />;
-            })}
+            {/* Decision parameters */}
+            <DecisionParameters />
           </div>
-
-          <SectionHeader title="Recent Signals" note="Latest screener output across every strategy." />
-
-          {/* Unified recent-signal feed (all strategies) */}
-          <RecentSignalsFeed />
-
-          <SectionHeader title="Decision Parameters" note="The thresholds the screener applies before emitting a signal." />
-
-          {/* Decision parameters */}
-          <DecisionParameters />
         </div>
       </div>
     </div>

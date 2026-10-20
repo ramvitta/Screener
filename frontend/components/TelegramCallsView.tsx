@@ -302,7 +302,7 @@ export default function TelegramCallsView() {
   return (
     <div className="min-h-screen bg-[#0B0E11] text-[#E8EAED]">
       <AppHeader />
-      <main className="mx-auto max-w-[1400px] px-6 py-5">
+      <main className="px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#3DD68C]">Telegram intelligence</div>

@@ -88,7 +88,7 @@ export default function StrategySignalsPage({ familyKey }: { familyKey: string }
       {header}
 
       <div className="min-h-0 flex-grow overflow-y-auto px-6 py-5">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4">
+        <div className="flex flex-col gap-4">
           {/* Title block */}
           <div
             className="rounded-[10px] border p-4"
