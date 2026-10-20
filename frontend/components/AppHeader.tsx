@@ -9,6 +9,7 @@ const NAV = [
   { href: "/screener", label: "Live Screener" },
   { href: "/breadth", label: "Breadth" },
   { href: "/daily-byte", label: "Daily Byte" },
+  { href: "/telegram-calls", label: "Trade Calls" },
   { href: "/history", label: "History" },
   { href: "/admin", label: "Admin" },
 ];
@@ -33,6 +34,15 @@ export default function AppHeader({ right }: { right?: ReactNode }) {
         <div className="text-[15px] font-semibold tracking-[0.2px]">OptionScreen</div>
       </div>
       <div className="h-7 w-px bg-[#1F2630]" />
+      {pathname !== "/" && (
+        <Link
+          href="/"
+          className="flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11px] font-semibold text-[#8B96A5] hover:border-[#2E3844] hover:text-[#C7CDD6]"
+          style={{ borderColor: "#232C36" }}
+        >
+          ← Dashboard
+        </Link>
+      )}
       <nav className="flex items-center gap-5">
         {NAV.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);

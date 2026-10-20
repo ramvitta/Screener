@@ -1,3 +1,5 @@
+import type { Candle } from "./charts";
+
 export type OptionType = "CE" | "PE";
 export type LegAction = "BUY" | "SELL";
 export type StrategyType = "bull_put_spread" | "bear_call_spread" | "iron_condor" | "straddle" | "strangle" | "adx_direction" | "unified";
@@ -318,6 +320,8 @@ export interface SignalHistoryItem {
   expiry: string | null;
   status: "accepted" | "rejected";
   reject_reason: string | null;
+  /** Unified-screener tier (PRIME / READY / WATCH); null for other strategies. */
+  tier?: string | null;
   generated_at: string | null;
   data_source: string | null;
   reason: string | null;
@@ -517,4 +521,196 @@ export interface DailyByteDigestResponse {
   summary?: string | null;
   top_symbols: ByteSymbolCall[];
   sources: DailyByteSource[];
+}
+
+// --- Telegram trade-call tracker -----------------------------------------
+export interface TelegramCall {
+  id: number;
+  message_fk: number;
+  chat_id: number;
+  chat_username?: string | null;
+  chat_title?: string | null;
+  message_id: number;
+  posted_at: string;
+  symbol: string;
+  symbol_raw?: string | null;
+  display_name?: string | null;
+  segment: string;
+  exchange?: string | null;
+  direction: "long" | "short" | "neutral";
+  action: "BUY" | "SELL";
+  option_type?: "CE" | "PE" | null;
+  strike?: number | null;
+  expiry?: string | null;
+  expiry_text?: string | null;
+  entry_low?: number | null;
+  entry_high?: number | null;
+  entry_price?: number | null;
+  stop_loss?: number | null;
+  target_1?: number | null;
+  target_2?: number | null;
+  target_3?: number | null;
+  cmp?: number | null;
+  horizon?: string | null;
+  status: "open" | "target_hit" | "sl_hit" | "closed" | "expired";
+  status_reason?: string | null;
+  status_source?: "message" | "price" | "manual" | null;
+  exit_price?: number | null;
+  closed_at?: string | null;
+  realized_pct?: number | null;
+  r_multiple?: number | null;
+  confidence?: number | null;
+  method: string;
+  is_valid: boolean;
+  tracking_status?: string | null;
+  tracking_message?: string | null;
+  last_checked_at?: string | null;
+  last_price?: number | null;
+  notes?: string | null;
+  source_text?: string | null;
+  source_url?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TelegramCallEvent {
+  id: number;
+  call_id?: number | null;
+  message_fk: number;
+  chat_id: number;
+  message_id: number;
+  posted_at: string;
+  event_type: "alert" | "target_hit" | "sl_hit" | "closed" | "partial_exit" | "trail" | "update";
+  symbol?: string | null;
+  option_type?: "CE" | "PE" | null;
+  strike?: number | null;
+  expiry?: string | null;
+  price?: number | null;
+  target_value?: number | null;
+  realized_pct?: number | null;
+  note?: string | null;
+  method: string;
+  is_valid: boolean;
+  text?: string | null;
+}
+
+export interface TelegramArchiveMessage {
+  id: number;
+  chat_id: number;
+  chat_username?: string | null;
+  chat_title?: string | null;
+  message_id: number;
+  posted_at: string;
+  posted_local?: string | null;
+  sender_name?: string | null;
+  sender_username?: string | null;
+  text: string;
+  media_type?: string | null;
+  views?: number | null;
+  forwards?: number | null;
+  reply_to_msg_id?: number | null;
+  category?: string | null;
+  method?: string | null;
+  confidence?: number | null;
+  call_count: number;
+}
+
+export interface TelegramCallDetail extends TelegramCall {
+  extraction?: Record<string, unknown> | null;
+  events: TelegramCallEvent[];
+  thread: TelegramArchiveMessage[];
+}
+
+export interface TelegramChatSummary {
+  chat_id: number;
+  username?: string | null;
+  title?: string | null;
+  message_count: number;
+  first_message_at?: string | null;
+  last_message_at?: string | null;
+  call_count: number;
+  open_count: number;
+  target_hit_count: number;
+  sl_hit_count: number;
+  closed_count: number;
+}
+
+export interface TelegramCallStats {
+  total_calls: number;
+  open: number;
+  target_hit: number;
+  sl_hit: number;
+  closed: number;
+  expired: number;
+  win_rate?: number | null;
+  avg_realized_pct?: number | null;
+  tracked: number;
+  unresolved: number;
+  total_messages: number;
+  classified_messages: number;
+  last_sync_at?: string | null;
+}
+
+export interface TelegramJobStatus {
+  state: "starting" | "running" | "ok" | "degraded" | "error";
+  message: string;
+  last_run?: string | null;
+  stats?: Record<string, number>;
+}
+
+export interface TelegramStatusResponse {
+  sync: TelegramJobStatus;
+  classify: TelegramJobStatus;
+  track: TelegramJobStatus;
+}
+
+export interface TelegramCallsPage {
+  items: TelegramCall[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface TelegramMessagesPage {
+  items: TelegramArchiveMessage[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface TelegramCallChartLevels {
+  entry?: number | null;
+  entry_low?: number | null;
+  entry_high?: number | null;
+  stop_loss?: number | null;
+  targets: number[];
+}
+
+export interface TelegramCallChartResponse {
+  call_id: number;
+  label: string;
+  trading_symbol: string;
+  exchange: string;
+  strike?: number | null;
+  expiry?: string | null;
+  /** Call/contract metadata — which fields matter depends on the segment. */
+  segment?: string | null;
+  instrument_type?: string | null;
+  underlying?: string | null;
+  lot_size?: number | null;
+  tick_size?: number | null;
+  option_type?: string | null;
+  direction?: string | null;
+  action?: string | null;
+  status?: string | null;
+  posted_at?: string | null;
+  /** UTC seconds, used to anchor the vertical "call posted" line. */
+  posted_at_utc_seconds?: number | null;
+  interval_minutes: number;
+  as_of: string;
+  levels: TelegramCallChartLevels;
+  ltp?: number | null;
+  first_candle_at?: string | null;
+  last_candle_at?: string | null;
+  candles: Candle[];
 }

@@ -44,30 +44,40 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
   return API_AUTH_TOKEN ? { ...extra, Authorization: `Bearer ${API_AUTH_TOKEN}` } : extra;
 }
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers: authHeaders() });
+async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, init);
+  } catch (error) {
+    // A network/DNS/CORS failure surfaces as a bare "Failed to fetch" in the
+    // UI. Say which backend could not be reached instead.
+    if (error instanceof TypeError) {
+      throw new Error(`Cannot reach backend at ${API_BASE_URL} (${path}) — is it running?`);
+    }
+    throw error;
+  }
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return res.json();
 }
 
+async function getJson<T>(path: string): Promise<T> {
+  return requestJson<T>(path, { cache: "no-store", headers: authHeaders() });
+}
+
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  return requestJson<T>(path, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
-  return res.json();
 }
 
 async function patchJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  return requestJson<T>(path, {
     method: "PATCH",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
-  return res.json();
 }
 
 // unrealized_pnl / booked_pnl now come pre-computed from the backend (see
@@ -164,12 +174,14 @@ export async function fetchScreenerRun(runId: string): Promise<ScreenerRunDetail
 export async function fetchSignalHistory(
   limit = 100,
   offset = 0,
-  filters?: { status?: string; strategy_type?: string; symbol?: string },
+  filters?: { status?: string; strategy_type?: string; symbol?: string; tier?: string; latest_only?: boolean },
 ): Promise<SignalHistoryItem[]> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (filters?.status) params.set("status", filters.status);
   if (filters?.strategy_type) params.set("strategy_type", filters.strategy_type);
   if (filters?.symbol) params.set("symbol", filters.symbol);
+  if (filters?.tier) params.set("tier", filters.tier);
+  if (filters?.latest_only) params.set("latest_only", "true");
   return getJson<SignalHistoryItem[]>(`/api/v1/screener/history?${params.toString()}`);
 }
 
@@ -410,4 +422,85 @@ export async function fetchBreadth(): Promise<BreadthResponse> {
 export async function fetchDailyByte(date?: string): Promise<DailyByteDigestResponse> {
   const q = date ? `?dt=${date}` : "";
   return getJson<DailyByteDigestResponse>(`/api/v1/market/daily-byte${q}`);
+}
+
+// --- Telegram trade-call tracker -----------------------------------------
+import type {
+  TelegramCallChartResponse,
+  TelegramCallDetail,
+  TelegramCallStats,
+  TelegramCallsPage,
+  TelegramChatSummary,
+  TelegramMessagesPage,
+  TelegramStatusResponse,
+} from "./types";
+
+export interface TelegramCallFilters {
+  status?: string;
+  symbol?: string;
+  chat_id?: number;
+  category?: string;
+  direction?: string;
+  segment?: string;
+  status_source?: string;
+  q?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+function queryString(params: object): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "" && v !== null) qs.set(k, String(v as string | number));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
+
+export async function fetchTelegramCalls(filters: TelegramCallFilters = {}): Promise<TelegramCallsPage> {
+  return getJson<TelegramCallsPage>(`/api/v1/telegram/calls${queryString(filters)}`);
+}
+
+export async function fetchTelegramCall(id: number): Promise<TelegramCallDetail> {
+  return getJson<TelegramCallDetail>(`/api/v1/telegram/calls/${id}`);
+}
+
+export async function fetchTelegramCallChart(id: number, interval = 5): Promise<TelegramCallChartResponse> {
+  return getJson<TelegramCallChartResponse>(`/api/v1/telegram/calls/${id}/chart?interval=${interval}`);
+}
+
+export async function fetchTelegramStats(): Promise<TelegramCallStats> {
+  return getJson<TelegramCallStats>("/api/v1/telegram/stats");
+}
+
+export async function fetchTelegramChats(): Promise<TelegramChatSummary[]> {
+  return getJson<TelegramChatSummary[]>("/api/v1/telegram/chats");
+}
+
+export async function fetchTelegramMessages(
+  filters: { chat_id?: number; category?: string; q?: string; date_from?: string; date_to?: string; limit?: number; offset?: number } = {},
+): Promise<TelegramMessagesPage> {
+  return getJson<TelegramMessagesPage>(`/api/v1/telegram/messages${queryString(filters)}`);
+}
+
+export async function fetchTelegramStatus(): Promise<TelegramStatusResponse> {
+  return getJson<TelegramStatusResponse>("/api/v1/telegram/status");
+}
+
+export async function triggerTelegramSync(payload: { max_per_chat?: number | null; full?: boolean; use_llm?: boolean; classify?: boolean; since?: string } = {}): Promise<unknown> {
+  return postJson("/api/v1/telegram/sync", payload);
+}
+
+export async function triggerTelegramClassify(payload: { limit?: number; use_llm?: boolean; only_unclassified?: boolean } = {}): Promise<unknown> {
+  return postJson("/api/v1/telegram/classify", payload);
+}
+
+export async function triggerTelegramTrack(limit?: number): Promise<unknown> {
+  return postJson(`/api/v1/telegram/track${limit ? `?limit=${limit}` : ""}`);
+}
+
+export async function closeTelegramCall(id: number, exitPrice: number, notes?: string): Promise<unknown> {
+  return postJson(`/api/v1/telegram/calls/${id}/close`, { exit_price: exitPrice, notes });
 }
