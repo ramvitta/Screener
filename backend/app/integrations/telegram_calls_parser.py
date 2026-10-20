@@ -84,7 +84,38 @@ _ALIASES = {
     "DEEPAKFERTPETRO": "DEEPAKFERT",
     "SYRMASGSTECHNOLOGY": "SYRMA",
     "ATHERENERGY": "ATHERENERG",
+    # Acronym-style tickers where the full company name shares no prefix with
+    # the NSE symbol (so the prefix fallback in find_stock_equity can't help).
+    "ADITYABIRLACAPITAL": "ABCAPITAL",
+    "BHARATELECTRONICS": "BEL",
+    "BHARATHEAVYELECTRICALS": "BHEL",
+    "BHARATPETROLEUMCORP": "BPCL",
+    "CANARABANK": "CANBK",
+    "BANDHANBANK": "BANDHANBNK",
+    "AUROBINDOPHARMA": "AUROPHARMA",
+    "DRLALPATHLABS": "LALPATHLAB",
+    "ENGINEERSINDIA": "ENGINERSIN",
+    "AUSMALLFINANCEBANK": "AUBANK",
+    "BERGERPAINTSINDIA": "BERGEPAINT",
+    "BIRLASOFT": "BSOFT",
+    "CHENNAIPETROLEUM": "CHENNPETRO",
+    "CONFIDENCEPETROIND": "CONFIPET",
+    "DALMIABHARAT": "DALBHARAT",
+    "EQUITASSMALLFINBANK": "EQUITASBNK",
+    "FIRSTSOURCESOLUTIONS": "FSL",
+    "CAPLINPOINTLAB": "CAPLIPOINT",
 }
+
+
+def resolve_alias(symbol: str) -> str:
+    """Map a full company name to its NSE ticker ("CANARABANK" -> "CANBK").
+
+    Idempotent: an already-normalised ticker is returned unchanged. Used at
+    contract-resolution time so calls parsed *before* an alias was added still
+    resolve (the stored ``symbol`` is the pre-alias full name).
+    """
+    return _ALIASES.get(symbol.upper(), symbol.upper())
+
 
 _ACTION_RE = re.compile(r"(?<![A-Za-z0-9])(BUY|SELL|SHORT|LONG)(?![A-Za-z0-9-])", re.I)
 _NEGATION_BEFORE_RE = re.compile(
@@ -256,6 +287,11 @@ def _symbol_key(raw: str) -> Tuple[str, str]:
             return symbol, original
 
     alnum = _norm_alnum(" ".join(tokens))
+    # A trailing strike/level run is parser noise ("AARTIIND372374",
+    # "BEL402403"), not part of the symbol — drop it before alias checks.
+    stripped = re.sub(r"\d{3,}$", "", alnum)
+    if len(stripped) >= 3:
+        alnum = stripped
     if alnum in _ALIASES:
         return _ALIASES[alnum], original
     # If there are several words, try progressively shorter prefixes for alias

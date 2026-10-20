@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from app.integrations.definedge_client import DefinedgeClient
+from app.integrations.telegram_calls_parser import resolve_alias
 
 NIFTY_STRIKE_INTERVAL = 50
 
@@ -166,10 +167,29 @@ def nearest_expiry(rows: List[dict], symbol: str, on_or_after: date) -> date:
 
 
 def find_stock_equity(rows: List[dict], symbol: str) -> ResolvedContract:
-    try:
-        row = next(r for r in rows if r["segment"] == "NSE" and r["instrument_type"] == "EQ" and r["trading_symbol"] == f"{symbol}-EQ")
-    except StopIteration:
-        raise ContractNotFound(f"No NSE equity listing found for {symbol}") from None
+    """Resolve a cash-equity symbol to its NSE listing.
+
+    The telegram parser stores the full space-stripped company name (e.g.
+    "ABBINDIA", "CARTRADETECH") while the NSE master uses a shorter ticker
+    ("ABB", "CARTRADE"). An exact `"<SYMBOL>-EQ"` match therefore fails for
+    most equity calls. Fall back to a prefix match — the ticker is almost
+    always a prefix of the full name (or vice-versa for truncated names like
+    "BLUESTAR" -> "BLUESTARCO") — and prefer the longest ticker so a short
+    ticker (e.g. "ABB") can't shadow a more specific one. A minimum length
+    guards against 1–2 character parser garbage ("BN", "MM").
+    """
+    eq_rows = [r for r in rows if r["segment"] == "NSE" and r["instrument_type"] == "EQ"]
+    row = next((r for r in eq_rows if r["trading_symbol"] == f"{symbol}-EQ"), None)
+    if row is None and len(symbol) >= 3:
+        prefixed = [
+            r for r in eq_rows
+            if len(r["symbol"]) >= 3
+            and (r["symbol"].startswith(symbol) or symbol.startswith(r["symbol"]))
+        ]
+        if prefixed:
+            row = max(prefixed, key=lambda r: len(r["symbol"]))
+    if row is None:
+        raise ContractNotFound(f"No NSE equity listing found for {symbol}")
     return _contract_from_row(row)
 
 
@@ -317,7 +337,7 @@ def find_contract_for_call(
     master. Same-month expiry fallback is intentional for commodity formats
     that only name the month.
     """
-    symbol = symbol.upper()
+    symbol = resolve_alias(symbol.upper())
     month_key = _month_key(expiry_text, expiry)
 
     def _options(instrument_types: tuple, segments: tuple) -> List[dict]:
