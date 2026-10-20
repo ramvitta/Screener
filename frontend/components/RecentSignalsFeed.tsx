@@ -24,7 +24,7 @@ export default function RecentSignalsFeed() {
     let cancelled = false;
     async function poll() {
       try {
-        const rows = await fetchSignalHistory(30, 0, { status: "accepted" });
+        const rows = await fetchSignalHistory(30, 0, { status: "accepted", latest_only: true });
         if (!cancelled) {
           setSignals(rows);
           setError(null);

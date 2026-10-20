@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { formatDateTime, formatStrategyLabel } from "@/lib/format";
-import { decisionMetrics } from "@/lib/signalMetrics";
+import { decisionMetrics, tierStyle } from "@/lib/signalMetrics";
 import type { SignalHistoryDetail } from "@/lib/types";
 
 export function rejectLabel(reason: string | null): string {
@@ -54,11 +54,23 @@ function Metric({ label, value }: { label: string; value: string }) {
 export function SignalRow({ signal }: { signal: SignalHistoryDetail }) {
   const [open, setOpen] = useState(false);
   const metrics = decisionMetrics(signal);
+  const tier = tierStyle(signal.tier);
   return (
-    <div className="rounded-[8px] border border-[#1F2630] bg-[#1B2129]">
+    <div
+      className="rounded-[8px] border border-[#1F2630] bg-[#1B2129]"
+      style={tier ? { borderLeft: `3px solid ${tier.color}` } : undefined}
+    >
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 px-3 py-2 text-left">
         <span className="text-[10px] text-[#5B6675]">{open ? "▾" : "▸"}</span>
         <StatusBadge status={signal.status} />
+        {tier && (
+          <span
+            className="rounded-[5px] px-2 py-0.5 text-[10px] font-bold"
+            style={{ color: tier.color, background: tier.bg, border: `1px solid ${tier.border}` }}
+          >
+            {tier.label}
+          </span>
+        )}
         <span className="text-[13px] font-medium text-[#C7CDD6]">
           {signal.strategy_type ? formatStrategyLabel(signal.strategy_type) : "—"}
         </span>

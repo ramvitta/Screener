@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { fetchSignalHistory, fetchSignalHistoryDetail, fetchScreenerRun, fetchScreenerRuns } from "@/lib/api";
 import { formatDateTime, formatStrategyLabel } from "@/lib/format";
 import { SignalRow } from "./SignalHistoryRow";
@@ -66,6 +67,10 @@ export default function SignalHistoryPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [strategyFilter, setStrategyFilter] = useState("");
   const [symbolFilter, setSymbolFilter] = useState("");
+  // The worker stores one row per run, so the unfiltered signal list repeats
+  // any symbol that keeps qualifying. Default to the newest row per
+  // strategy/symbol; the run cards remain the full historical record.
+  const [latestOnly, setLatestOnly] = useState(true);
 
   useEffect(() => {
     fetchScreenerRuns(50)
@@ -79,10 +84,11 @@ export default function SignalHistoryPage() {
       status: statusFilter || undefined,
       strategy_type: strategyFilter || undefined,
       symbol: symbolFilter || undefined,
+      latest_only: latestOnly,
     })
       .then(setSignals)
       .catch(() => setError("Could not load signals — is the backend running?"));
-  }, [statusFilter, strategyFilter, symbolFilter]);
+  }, [statusFilter, strategyFilter, symbolFilter, latestOnly]);
 
   useEffect(() => {
     if (tab === "signals") loadSignals();
@@ -111,6 +117,9 @@ export default function SignalHistoryPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6">
+      <Link href="/" className="mb-3 inline-flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11px] font-semibold text-[#8B96A5] hover:text-[#C7CDD6]" style={{ borderColor: "#232C36" }}>
+        ← Dashboard
+      </Link>
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-[#C7CDD6]">Signal History</h1>
@@ -149,6 +158,15 @@ export default function SignalHistoryPage() {
             placeholder="Symbol (e.g. NIFTY)"
             className="rounded-[6px] border border-[#1F2630] bg-[#12161C] px-2 py-1.5 text-xs text-[#C7CDD6] placeholder:text-[#5B6675]"
           />
+          <label className="flex items-center gap-1.5 text-xs text-[#8B96A5]">
+            <input
+              type="checkbox"
+              checked={latestOnly}
+              onChange={(e) => setLatestOnly(e.target.checked)}
+              className="accent-[#3DD68C]"
+            />
+            Latest per symbol
+          </label>
         </div>
       )}
 

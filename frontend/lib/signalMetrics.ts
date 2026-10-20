@@ -1,6 +1,19 @@
 import { formatCurrency, formatPct } from "@/lib/format";
 import type { SignalHistoryDetail } from "@/lib/types";
 
+/** Colour coding for the unified screener's three tiers. PRIME is the only
+ * tier that passes all three checks (ADX + candle + parity), so it gets the
+ * gold accent; READY is blue and WATCH is muted grey. */
+export const TIER_STYLES: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  PRIME: { color: "#F0B429", bg: "#241A12", border: "#F0B42988", label: "★ PRIME" },
+  READY: { color: "#5B9BD5", bg: "#152538", border: "#5B9BD555", label: "READY" },
+  WATCH: { color: "#8B96A5", bg: "#1B2129", border: "#8B96A555", label: "WATCH" },
+};
+
+export function tierStyle(tier?: string | null) {
+  return (tier && TIER_STYLES[tier.toUpperCase()]) || null;
+}
+
 /**
  * Human-readable decision metrics for a stored signal, keyed by strategy type.
  * Str-stra signals (straddle/strangle/adx_direction/unified) carry their raw

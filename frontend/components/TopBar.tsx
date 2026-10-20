@@ -35,6 +35,14 @@ export default function TopBar({
         </div>
       </div>
 
+      <Link
+        href="/"
+        className="flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11px] font-semibold text-[#8B96A5] hover:border-[#2E3844] hover:text-[#C7CDD6]"
+        style={{ borderColor: "#232C36" }}
+      >
+        ← Dashboard
+      </Link>
+
       <div className="h-7 w-px bg-[#1F2630]" />
 
       {indices.map((q) => (
