@@ -7,7 +7,7 @@ pydantic==2.13.5
 pydantic-settings==2.11.0
 httpx==0.28.1
 websockets==15.0.1  # required by uvicorn for the /ws endpoints
-clickhouse-connect==0.15.1
+clickhouse-connect==1.11.0
 APScheduler==3.11.3
 python-dotenv==1.2.4
 pyotp==2.10.0
