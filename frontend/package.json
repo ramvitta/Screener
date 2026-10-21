@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "16.4.1",
+    "next": "16.4.2",
     "openalgo-charts": "^2.6.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
